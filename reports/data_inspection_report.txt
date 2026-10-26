@@ -1,0 +1,139 @@
+FULL CSV DATA INSPECTION
+Generated: 2026-10-26T11:57:48+08:00
+Data directory: C:\Users\darre\OneDrive\Documents\NUS SEM 5\IS4228\Project\cleaned\cleaned
+Every CSV row was scanned in chunks. No raw records are included.
+
+==============================================================================
+customers.csv
+==============================================================================
+File size: 59.0 MB
+Total rows: 515,088
+Columns (14): customer_id, account_key, bank_id, account_id, customer_type, occupation_or_industry, employment_status, monthly_income_sgd, account_open_channel, expected_monthly_amount_sgd, expected_monthly_txn_count, expects_international_activity, account_open_date, risk_band
+
+COLUMN SUMMARIES
+- customer_id: type=int64; missing=0 (0.00%)
+    numeric: min=1.0, max=515088.0, mean=257544
+- account_key: type=object; missing=0 (0.00%)
+- bank_id: type=int64; missing=0 (0.00%)
+    numeric: min=1.0, max=356303.0, mean=103319
+- account_id: type=object; missing=0 (0.00%)
+- customer_type: type=object; missing=0 (0.00%)
+- occupation_or_industry: type=object; missing=0 (0.00%)
+- employment_status: type=object; missing=76,912 (14.93%)
+- monthly_income_sgd: type=float64; missing=0 (0.00%)
+    numeric: min=204.69, max=6773508.7, mean=23242
+- account_open_channel: type=object; missing=0 (0.00%)
+- expected_monthly_amount_sgd: type=float64; missing=0 (0.00%)
+    numeric: min=91.44, max=7337893.0, mean=22188.2
+- expected_monthly_txn_count: type=int64; missing=0 (0.00%)
+    numeric: min=10.0, max=500.0, mean=87.7054
+- expects_international_activity: type=int64; missing=0 (0.00%)
+    numeric: min=0.0, max=1.0, mean=0.245387
+- account_open_date: type=object; missing=0 (0.00%)
+- risk_band: type=object; missing=0 (0.00%)
+
+==============================================================================
+fx_rates.csv
+==============================================================================
+File size: 0.0 MB
+Total rows: 15
+Columns (3): currency, usd_per_unit, sgd_per_unit
+
+COLUMN SUMMARIES
+- currency: type=object; missing=0 (0.00%)
+- usd_per_unit: type=float64; missing=0 (0.00%)
+    numeric: min=0.0094876660331121, max=11874.999999999998, mean=792.133
+- sgd_per_unit: type=float64; missing=0 (0.00%)
+    numeric: min=0.0129032258050325, max=16149.999999999998, mean=1077.3
+
+==============================================================================
+transactions.csv
+==============================================================================
+File size: 657.7 MB
+Total rows: 5,078,336
+Columns (15): txn_timestamp, sender_account_key, sender_bank_id, sender_account_id, receiver_account_key, receiver_bank_id, receiver_account_id, amount_sent, currency_sent, amount_received, currency_received, amount_usd, amount_sgd, payment_method, is_laundering
+
+COLUMN SUMMARIES
+- txn_timestamp: type=object; missing=0 (0.00%)
+- sender_account_key: type=object; missing=0 (0.00%)
+- sender_bank_id: type=int64; missing=0 (0.00%)
+    numeric: min=1.0, max=356303.0, mean=45730.6
+- sender_account_id: type=object; missing=0 (0.00%)
+- receiver_account_key: type=object; missing=0 (0.00%)
+- receiver_bank_id: type=int64; missing=0 (0.00%)
+    numeric: min=1.0, max=356294.0, mean=65744.6
+- receiver_account_id: type=object; missing=0 (0.00%)
+- amount_sent: type=float64; missing=0 (0.00%)
+    numeric: min=1e-06, max=1046302363293.48, mean=4.50928e+06
+- currency_sent: type=object; missing=0 (0.00%)
+- amount_received: type=float64; missing=0 (0.00%)
+    numeric: min=1e-06, max=1046302363293.48, mean=5.98874e+06
+- currency_received: type=object; missing=0 (0.00%)
+- amount_usd: type=float64; missing=0 (0.00%)
+    numeric: min=0.0, max=26558612904.53, mean=350945
+- amount_sgd: type=float64; missing=0 (0.00%)
+    numeric: min=0.0, max=36119713550.16, mean=477285
+- payment_method: type=object; missing=0 (0.00%)
+- is_laundering: type=int64; missing=0 (0.00%)
+    numeric: min=0.0, max=1.0, mean=0.00101943
+
+OVERALL LABEL DISTRIBUTION
+- 0: 5,073,159 (99.89806%)
+- 1: 5,177 (0.10194%)
+
+DATE RANGE
+- txn_timestamp: 2022-09-01 00:00:00 to 2022-09-18 16:18:00; parse failures=0
+
+DAILY TRANSACTION AND LAUNDERING COUNTS
+date        transactions    laundering    laundering_rate
+2022-09-01     1,114,919          322  0.02888%
+2022-09-02       754,449          408  0.05408%
+2022-09-03       207,382          391  0.18854%
+2022-09-04       207,430          407  0.19621%
+2022-09-05       482,650          471  0.09759%
+2022-09-06       482,089          531  0.11015%
+2022-09-07       482,750          497  0.10295%
+2022-09-08       482,771          539  0.11165%
+2022-09-09       654,463          514  0.07854%
+2022-09-10       208,325          442  0.21217%
+2022-09-11           396          232  58.58586%
+2022-09-12           281          170  60.49822%
+2022-09-13           184          106  57.60870%
+2022-09-14           121           70  57.85124%
+2022-09-15            46           28  60.86957%
+2022-09-16            46           26  56.52174%
+2022-09-17            23           15  65.21739%
+2022-09-18            11            8  72.72727%
+
+ACTUAL CHRONOLOGICAL SPLITS
+These date boundaries match split_data.py.
+
+TRAIN: 2022-09-01 to 2022-09-06
+  Dates: 6
+  Transactions: 3,248,919
+  Laundering transactions: 2,530
+  Laundering rate: 0.07787%
+
+VALIDATION: 2022-09-07 to 2022-09-08
+  Dates: 2
+  Transactions: 965,521
+  Laundering transactions: 1,036
+  Laundering rate: 0.10730%
+
+TEST: 2022-09-09 to 2022-09-18
+  Dates: 10
+  Transactions: 863,896
+  Laundering transactions: 1,611
+  Laundering rate: 0.18648%
+
+TOTAL CHECKS
+Transaction rows: 5,078,336 (expected 5,078,336)
+Rows with valid labels: 5,078,336 (expected 5,078,336)
+Laundering labels: 5,177 (expected 5,177)
+
+==============================================================================
+JOIN KEY CHECKS
+==============================================================================
+Distinct customer account_key values: 515,088
+sender keys matching customers.account_key: 5,078,336/5,078,336 (100.00%)
+receiver keys matching customers.account_key: 5,078,336/5,078,336 (100.00%)

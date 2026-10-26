@@ -1,0 +1,195 @@
+{
+  "training": {
+    "train_rows": 3248919,
+    "positive_labels_in_train": 2530,
+    "xgboost_scale_pos_weight": 1283.1577075098814,
+    "logistic_regression_max_iter": 1000,
+    "logistic_regression_iterations_used": 1000,
+    "logistic_regression_converged": false
+  },
+  "threshold_method": "Maximum F1 on validation data. This is a comparison baseline; the product threshold should later reflect review capacity.",
+  "validation_metrics": {
+    "logistic_regression": {
+      "threshold": 1.0,
+      "precision": 0.004577652619434555,
+      "recall": 0.3561776061776062,
+      "f1": 0.009039132831134231,
+      "average_precision_pr_auc": 0.003791343330730734,
+      "roc_auc": 0.8175820190353853,
+      "accuracy": 0.916203790492387,
+      "confusion_matrix": [
+        [
+          884245,
+          80240
+        ],
+        [
+          667,
+          369
+        ]
+      ],
+      "alerts": 80609,
+      "actual_laundering": 1036
+    },
+    "xgboost": {
+      "threshold": 0.9667461514472961,
+      "precision": 0.102803738317757,
+      "recall": 0.1805019305019305,
+      "f1": 0.1309982486860525,
+      "average_precision_pr_auc": 0.07326191032046513,
+      "roc_auc": 0.9552212112399674,
+      "accuracy": 0.9974304028602174,
+      "confusion_matrix": [
+        [
+          962853,
+          1632
+        ],
+        [
+          849,
+          187
+        ]
+      ],
+      "alerts": 1819,
+      "actual_laundering": 1036
+    }
+  },
+  "test_metrics": {
+    "logistic_regression": {
+      "overall": {
+        "threshold": 1.0,
+        "precision": 0.007441400555252716,
+        "recall": 0.3643699565487275,
+        "f1": 0.014584938007762598,
+        "average_precision_pr_auc": 0.006279331846325373,
+        "roc_auc": 0.815105010550278,
+        "accuracy": 0.9081833924453869,
+        "confusion_matrix": [
+          [
+            783989,
+            78296
+          ],
+          [
+            1024,
+            587
+          ]
+        ],
+        "alerts": 78883,
+        "actual_laundering": 1611
+      },
+      "sep_09_10": {
+        "threshold": 1.0,
+        "precision": 0.004486476841112442,
+        "recall": 0.3682008368200837,
+        "f1": 0.008864935653639296,
+        "average_precision_pr_auc": 0.0037908866184816732,
+        "roc_auc": 0.8171085064933779,
+        "accuracy": 0.9087724910406728,
+        "confusion_matrix": [
+          [
+            783726,
+            78106
+          ],
+          [
+            604,
+            352
+          ]
+        ],
+        "alerts": 78458,
+        "actual_laundering": 956
+      },
+      "sep_11_18": {
+        "threshold": 1.0,
+        "precision": 0.5529411764705883,
+        "recall": 0.35877862595419846,
+        "f1": 0.43518518518470783,
+        "average_precision_pr_auc": 0.5922360762767835,
+        "roc_auc": 0.5354077144734847,
+        "accuracy": 0.44945848375451264,
+        "confusion_matrix": [
+          [
+            263,
+            190
+          ],
+          [
+            420,
+            235
+          ]
+        ],
+        "alerts": 425,
+        "actual_laundering": 655
+      }
+    },
+    "xgboost": {
+      "overall": {
+        "threshold": 0.9667461514472961,
+        "precision": 0.16414009409304756,
+        "recall": 0.19490999379267535,
+        "f1": 0.17820658342742648,
+        "average_precision_pr_auc": 0.12941212261297974,
+        "roc_auc": 0.9647301899241505,
+        "accuracy": 0.9966477446359284,
+        "confusion_matrix": [
+          [
+            860686,
+            1599
+          ],
+          [
+            1297,
+            314
+          ]
+        ],
+        "alerts": 1913,
+        "actual_laundering": 1611
+      },
+      "sep_09_10": {
+        "threshold": 0.9667461514472961,
+        "precision": 0.09106628242074928,
+        "recall": 0.16527196652719664,
+        "f1": 0.1174284652540941,
+        "average_precision_pr_auc": 0.06967184342117512,
+        "roc_auc": 0.9543720898084148,
+        "accuracy": 0.9972472959753729,
+        "confusion_matrix": [
+          [
+            860255,
+            1577
+          ],
+          [
+            798,
+            158
+          ]
+        ],
+        "alerts": 1735,
+        "actual_laundering": 956
+      },
+      "sep_11_18": {
+        "threshold": 0.9667461514472961,
+        "precision": 0.8764044943820225,
+        "recall": 0.2381679389312977,
+        "f1": 0.3745498199276351,
+        "average_precision_pr_auc": 0.8600320385962289,
+        "roc_auc": 0.8461284397485804,
+        "accuracy": 0.529783393501805,
+        "confusion_matrix": [
+          [
+            431,
+            22
+          ],
+          [
+            499,
+            156
+          ]
+        ],
+        "alerts": 178,
+        "actual_laundering": 655
+      }
+    }
+  },
+  "selected_by_validation_pr_auc": "xgboost",
+  "notes": [
+    "Both models were trained from scratch in this run.",
+    "Preprocessing was fitted on training data only.",
+    "Thresholds were selected on validation data only.",
+    "Sep 11-18 is reported separately because its label rate is unusual.",
+    "Class-weighted model scores are ranking scores, not verified probabilities."
+  ]
+}
