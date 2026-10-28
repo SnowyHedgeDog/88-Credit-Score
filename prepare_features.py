@@ -10,9 +10,8 @@ SPLIT_DIR = DATA_DIR / "splits"
 OUTPUT_DIR = DATA_DIR / "features"
 CHUNK_SIZE = 100_000
 
-SPLITS = ["train", "validation", "test"]
+SPLITS = ["train", "validation", "test", "stress_test"]
 
-# Fields used from the customer file. risk_band and all customer IDs are excluded. ***
 PROFILE_COLUMNS = [
     "account_key",
     "customer_type",
@@ -56,25 +55,20 @@ def load_customer_profiles():
     if customers["account_key"].duplicated().any():
         raise ValueError("customers.csv has duplicate account_key values.")
 
-    customers = customers.set_index("account_key")
-    return customers
+    return customers.set_index("account_key")
 
 
 def add_customer_profile_features(chunk, customer_lookup, role):
     account_column = f"{role}_account_key"
-
-    # Match each transaction's sender or receiver to their customer profile.
     account_keys = chunk[account_column].astype("string")
     profiles = customer_lookup.reindex(account_keys.to_numpy())
 
-    # Align profile rows with their transaction rows before combining them.
     profiles = profiles.reset_index(drop=True)
     profiles = profiles.add_prefix(f"{role}_")
 
     chunk = chunk.reset_index(drop=True)
     chunk = pd.concat([chunk, profiles], axis=1)
 
-    # Keep missing employment status as an explicit category.
     status_column = f"{role}_employment_status"
     chunk[status_column] = chunk[status_column].fillna("Unknown").astype(str)
 
@@ -82,24 +76,21 @@ def add_customer_profile_features(chunk, customer_lookup, role):
 
 
 def prepare_chunk(chunk, customer_lookup):
-    # Keep metadata separately from model features.
     metadata = chunk[
         ["txn_timestamp", "sender_account_key", "receiver_account_key"]
     ].copy()
 
     target = pd.to_numeric(chunk["is_laundering"], errors="coerce")
-    if target.isna().any():
+    if target.isna().any() or not target.isin([0, 1]).all():
         raise ValueError("Found missing or invalid is_laundering labels.")
 
     timestamps = pd.to_datetime(chunk["txn_timestamp"], errors="coerce")
     if timestamps.isna().any():
         raise ValueError("Found invalid txn_timestamp values.")
 
-    # Attach sender and receiver customer profiles.
     chunk = add_customer_profile_features(chunk, customer_lookup, "sender")
     chunk = add_customer_profile_features(chunk, customer_lookup, "receiver")
 
-    # Currency-normalised amount. Use log1p to reduce the effect of extreme skew.
     amount_sgd = pd.to_numeric(chunk["amount_sgd"], errors="coerce")
     if amount_sgd.isna().any() or (amount_sgd < 0).any():
         raise ValueError("amount_sgd contains invalid or negative values.")
@@ -107,14 +98,14 @@ def prepare_chunk(chunk, customer_lookup):
     features = pd.DataFrame(index=chunk.index)
     features["log_amount_sgd"] = np.log1p(amount_sgd)
 
-    # Transaction time features.
     features["transaction_hour"] = timestamps.dt.hour.astype("int8")
-    features["transaction_day_of_week"] = timestamps.dt.dayofweek.astype("int8")
+    features["transaction_day_of_week"] = (
+        timestamps.dt.dayofweek.astype("int8")
+    )
     features["transaction_is_weekend"] = (
         timestamps.dt.dayofweek >= 5
     ).astype("int8")
 
-    # Customer profile features and account age at the time of the transaction.
     for role in ["sender", "receiver"]:
         income_col = f"{role}_monthly_income_sgd"
         expected_col = f"{role}_expected_monthly_amount_sgd"
@@ -124,21 +115,26 @@ def prepare_chunk(chunk, customer_lookup):
 
         income = pd.to_numeric(chunk[income_col], errors="coerce")
         expected_amount = pd.to_numeric(chunk[expected_col], errors="coerce")
-        expected_count = pd.to_numeric(chunk[expected_count_col], errors="coerce")
+        expected_count = pd.to_numeric(
+            chunk[expected_count_col],
+            errors="coerce",
+        )
         expects_international = pd.to_numeric(
-            chunk[international_col], errors="coerce"
+            chunk[international_col],
+            errors="coerce",
         )
 
-        # Profile values are transformed using fixed operations, not statistics
-        # learned from validation or test data.
-        features[f"{role}_log_monthly_income"] = np.log1p(income.clip(lower=0))
+        features[f"{role}_log_monthly_income"] = np.log1p(
+            income.clip(lower=0)
+        )
         features[f"{role}_log_expected_monthly_amount"] = np.log1p(
             expected_amount.clip(lower=0)
         )
         features[f"{role}_expected_monthly_txn_count"] = expected_count
-        features[f"{role}_expects_international_activity"] = expects_international
+        features[f"{role}_expects_international_activity"] = (
+            expects_international
+        )
 
-        # Compare this transaction with declared customer profile amounts.
         features[f"log_amount_to_{role}_income"] = np.log1p(
             amount_sgd / income.clip(lower=1)
         )
@@ -146,19 +142,15 @@ def prepare_chunk(chunk, customer_lookup):
             amount_sgd / expected_amount.clip(lower=1)
         )
 
-        # Account age measured on the transaction date, not today's date.
         opened = pd.to_datetime(chunk[open_date_col], errors="coerce")
         features[f"{role}_account_age_days"] = (
             timestamps - opened
         ).dt.days.clip(lower=0)
 
-    # Categorical features. Missing values become an explicit category.
     for column in CATEGORY_COLUMNS:
         features[column] = chunk[column].fillna("Unknown").astype(str)
 
-    # Metadata and target are retained for evaluation and account-level
-    # aggregation, but must be excluded from the model's input columns.
-    output = pd.concat(
+    return pd.concat(
         [
             metadata.reset_index(drop=True),
             features.reset_index(drop=True),
@@ -166,8 +158,6 @@ def prepare_chunk(chunk, customer_lookup):
         ],
         axis=1,
     )
-
-    return output
 
 
 def main():
@@ -187,7 +177,6 @@ def main():
         if not input_path.exists():
             raise FileNotFoundError(f"Could not find split file: {input_path}")
 
-        # Remove only this script's previous output before regenerating it.
         if output_path.exists():
             output_path.unlink()
 
@@ -237,9 +226,9 @@ def main():
         print(f"Saved to: {output_path}")
 
     print("\nFeature preparation complete.")
-    print("Metadata columns to exclude from model inputs:")
+    print("Metadata excluded from model inputs:")
     print("  txn_timestamp, sender_account_key, receiver_account_key")
-    print("Target column to keep separate from model inputs:")
+    print("Target kept separate from model inputs:")
     print("  is_laundering")
 
 

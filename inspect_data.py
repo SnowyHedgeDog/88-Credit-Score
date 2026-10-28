@@ -130,11 +130,12 @@ def scan_file(path):
 
 
 def add_actual_split_summary(lines, daily):
-    """Summarize the same date cutoffs used by split_data.py."""
+    """Summarize the date ranges used by split_data.py."""
     split_dates = {
         "TRAIN": lambda date: date < "2022-09-07",
         "VALIDATION": lambda date: "2022-09-07" <= date < "2022-09-09",
-        "TEST": lambda date: date >= "2022-09-09",
+        "PRIMARY TEST": lambda date: "2022-09-09" <= date < "2022-09-11",
+        "STRESS TEST": lambda date: date >= "2022-09-11",
     }
 
     lines.extend([
@@ -144,7 +145,11 @@ def add_actual_split_summary(lines, daily):
     ])
 
     for split_name, include_date in split_dates.items():
-        dates = [date for date in sorted(daily) if include_date(date)]
+        dates = [
+            date
+            for date in sorted(daily)
+            if include_date(date)
+        ]
 
         if not dates:
             lines.extend(["", f"{split_name}: no dates found"])
@@ -152,7 +157,7 @@ def add_actual_split_summary(lines, daily):
 
         rows = sum(daily[date]["transactions"] for date in dates)
         positives = sum(daily[date]["laundering"] for date in dates)
-        rate = positives / rows if rows else 0
+        rate = positives / rows if rows else 0.0
 
         lines.extend([
             "",

@@ -1,15 +1,12 @@
 from pathlib import Path
 import json
-import warnings
 
 import joblib
 import numpy as np
 import pandas as pd
 
 from sklearn.compose import ColumnTransformer
-from sklearn.exceptions import ConvergenceWarning
 from sklearn.impute import SimpleImputer
-from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
     accuracy_score,
     average_precision_score,
@@ -31,7 +28,6 @@ MODEL_DIR = ROOT / "models"
 REPORT_DIR = ROOT / "reports"
 
 TARGET = "is_laundering"
-LOGISTIC_MAX_ITER = 1000
 
 NUMERIC_FEATURES = [
     "log_amount_sgd",
@@ -72,14 +68,14 @@ FEATURES = NUMERIC_FEATURES + CATEGORICAL_FEATURES
 
 
 def make_one_hot_encoder():
-    """Support both newer and older scikit-learn versions."""
+    """Support newer and older scikit-learn versions."""
     try:
         return OneHotEncoder(handle_unknown="ignore", sparse_output=True)
     except TypeError:
         return OneHotEncoder(handle_unknown="ignore", sparse=True)
 
 
-def load_split(name, include_timestamp=False):
+def load_split(name):
     path = FEATURE_DIR / f"{name}_features.csv"
 
     if not path.exists():
@@ -88,26 +84,23 @@ def load_split(name, include_timestamp=False):
             "Run split_data.py and prepare_features.py first."
         )
 
-    columns = FEATURES + [TARGET]
-    if include_timestamp:
-        columns.append("txn_timestamp")
-
     print(f"Loading {name} data...")
-    data = pd.read_csv(path, usecols=columns, low_memory=False)
+    data = pd.read_csv(
+        path,
+        usecols=FEATURES + [TARGET],
+        low_memory=False,
+    )
 
     X = data[FEATURES]
     y = data[TARGET].astype("int8")
 
-    timestamps = None
-    if include_timestamp:
-        timestamps = pd.to_datetime(data["txn_timestamp"], errors="coerce")
-        if timestamps.isna().any():
-            raise ValueError(f"Invalid timestamps found in {name} data.")
+    if not y.isin([0, 1]).all():
+        raise ValueError(f"Unexpected target values in {name} data.")
 
     print(f"  Rows: {len(data):,}")
     print(f"  Laundering labels: {int(y.sum()):,}")
 
-    return X, y, timestamps
+    return X, y
 
 
 def make_preprocessor():
@@ -117,7 +110,10 @@ def make_preprocessor():
     ])
 
     categorical_pipeline = Pipeline([
-        ("imputer", SimpleImputer(strategy="constant", fill_value="Unknown")),
+        (
+            "imputer",
+            SimpleImputer(strategy="constant", fill_value="Unknown"),
+        ),
         ("onehot", make_one_hot_encoder()),
     ])
 
@@ -131,10 +127,16 @@ def make_preprocessor():
     )
 
 
+def positive_class_scores(model, transformed_features):
+    probabilities = model.predict_proba(transformed_features)
+    positive_column = list(model.classes_).index(1)
+    return probabilities[:, positive_column]
+
+
 def choose_f1_threshold(y_true, scores):
     precision, recall, thresholds = precision_recall_curve(y_true, scores)
 
-    # Precision and recall have one more value than the thresholds array.
+    # Precision and recall have one extra value compared with thresholds.
     precision = precision[:-1]
     recall = recall[:-1]
 
@@ -143,19 +145,33 @@ def choose_f1_threshold(y_true, scores):
         / (precision + recall + 1e-12)
     )
 
-    best_index = int(np.argmax(f1_values))
-    return float(thresholds[best_index])
+    return float(thresholds[int(np.argmax(f1_values))])
 
 
 def calculate_metrics(y_true, scores, threshold):
+    y_true = np.asarray(y_true, dtype="int8")
+    scores = np.asarray(scores)
     predictions = (scores >= threshold).astype("int8")
 
-    precision = precision_score(y_true, predictions, zero_division=0)
-    recall = recall_score(y_true, predictions, zero_division=0)
+    precision = precision_score(
+        y_true,
+        predictions,
+        zero_division=0,
+    )
+    recall = recall_score(
+        y_true,
+        predictions,
+        zero_division=0,
+    )
     f1 = (
         2 * precision * recall
         / (precision + recall + 1e-12)
     )
+
+    if len(np.unique(y_true)) == 2:
+        roc_auc = float(roc_auc_score(y_true, scores))
+    else:
+        roc_auc = None
 
     return {
         "threshold": float(threshold),
@@ -165,13 +181,21 @@ def calculate_metrics(y_true, scores, threshold):
         "average_precision_pr_auc": float(
             average_precision_score(y_true, scores)
         ),
-        "roc_auc": float(roc_auc_score(y_true, scores)),
+        "roc_auc": roc_auc,
         "accuracy": float(accuracy_score(y_true, predictions)),
         "confusion_matrix": confusion_matrix(
-            y_true, predictions, labels=[0, 1]
+            y_true,
+            predictions,
+            labels=[0, 1],
         ).tolist(),
         "alerts": int(predictions.sum()),
-        "actual_laundering": int(np.asarray(y_true).sum()),
+        "actual_laundering": int(y_true.sum()),
+        "false_alerts": int(
+            np.sum((predictions == 1) & (y_true == 0))
+        ),
+        "missed_laundering_cases": int(
+            np.sum((predictions == 0) & (y_true == 1))
+        ),
     }
 
 
@@ -179,8 +203,8 @@ def main():
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Load training data and fit preprocessing on this split only.
-    X_train_raw, y_train, _ = load_split("train")
+    # Load training data and fit preprocessing on training data only.
+    X_train_raw, y_train = load_split("train")
     train_rows = len(y_train)
     train_positives = int(y_train.sum())
 
@@ -189,192 +213,145 @@ def main():
 
     preprocessor = make_preprocessor()
 
-    print("\nFitting preprocessing on training data...")
+    print("\nFitting preprocessing on training data only...")
     X_train = preprocessor.fit_transform(X_train_raw)
     del X_train_raw
 
-    # The positive class is rare, so tell XGBoost to give it more weight.
     train_negatives = train_rows - train_positives
     scale_pos_weight = train_negatives / train_positives
 
-    # Both models start fresh and use the same training features.
-    models = {
-        "logistic_regression": LogisticRegression(
-            solver="saga",
-            class_weight="balanced",
-            max_iter=LOGISTIC_MAX_ITER,
-            tol=1e-3,
-            n_jobs=-1,
-            random_state=42,
-        ),
-        "xgboost": XGBClassifier(
-            n_estimators=150,
-            max_depth=6,
-            learning_rate=0.1,
-            subsample=0.8,
-            colsample_bytree=0.8,
-            min_child_weight=5,
-            objective="binary:logistic",
-            eval_metric="aucpr",
-            tree_method="hist",
-            scale_pos_weight=scale_pos_weight,
-            n_jobs=-1,
-            random_state=42,
-        ),
-    }
-
-    # Load validation data and apply training-fitted preprocessing.
-    X_val_raw, y_val, _ = load_split("validation")
+    # Load validation data and apply the training-fitted preprocessing.
+    X_val_raw, y_val = load_split("validation")
     print("Transforming validation data...")
     X_val = preprocessor.transform(X_val_raw)
     del X_val_raw
 
-    validation_results = {}
-    thresholds = {}
-    logistic_iterations = None
-    logistic_converged = None
-
-    for name, model in models.items():
-        print(f"\nTraining {name} from scratch...")
-
-        if name == "logistic_regression":
-            with warnings.catch_warnings(record=True) as caught:
-                warnings.simplefilter("always", ConvergenceWarning)
-                model.fit(X_train, y_train)
-
-            logistic_iterations = int(model.n_iter_[0])
-            had_convergence_warning = any(
-                issubclass(w.category, ConvergenceWarning) for w in caught
-            )
-            logistic_converged = not had_convergence_warning
-
-            print(f"  Iterations used: {logistic_iterations}")
-            if logistic_converged:
-                print("  Logistic regression converged.")
-            else:
-                print(
-                    "  WARNING: Logistic regression reached its iteration "
-                    "limit and may need more iterations."
-                )
-        else:
-            model.fit(X_train, y_train)
-
-        # Choose a comparison threshold using validation data only.
-        validation_scores = model.predict_proba(X_val)[:, 1]
-        threshold = choose_f1_threshold(y_val, validation_scores)
-        thresholds[name] = threshold
-
-        metrics = calculate_metrics(
-            y_val, validation_scores, threshold
-        )
-        validation_results[name] = metrics
-
-        print(f"  Validation PR-AUC: {metrics['average_precision_pr_auc']:.5f}")
-        print(f"  Validation precision: {metrics['precision']:.5f}")
-        print(f"  Validation recall: {metrics['recall']:.5f}")
-        print(f"  Validation F1: {metrics['f1']:.5f}")
-        print(f"  Validation threshold: {threshold:.6f}")
-
-        # Save the newly trained model.
-        joblib.dump(model, MODEL_DIR / f"{name}.joblib")
-
-    del X_train, y_train, X_val
-
-    # Save the preprocessor fitted using training data only.
-    joblib.dump(preprocessor, MODEL_DIR / "preprocessor.joblib")
-
-    # Evaluate on test after model fitting and threshold selection are complete.
-    X_test_raw, y_test, test_timestamps = load_split(
-        "test",
-        include_timestamp=True,
+    # This is the only model trained in this script.
+    model = XGBClassifier(
+        n_estimators=150,
+        max_depth=6,
+        learning_rate=0.1,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        min_child_weight=5,
+        objective="binary:logistic",
+        eval_metric="aucpr",
+        tree_method="hist",
+        scale_pos_weight=scale_pos_weight,
+        n_jobs=-1,
+        random_state=42,
     )
-    print("Transforming test data...")
-    X_test = preprocessor.transform(X_test_raw)
-    del X_test_raw
 
-    test_results = {}
+    print("\nTraining XGBoost from scratch...")
+    model.fit(X_train, y_train)
 
-    for name, model in models.items():
-        test_scores = model.predict_proba(X_test)[:, 1]
-        threshold = thresholds[name]
+    # Select the threshold on validation data only.
+    validation_scores = positive_class_scores(model, X_val)
+    threshold = choose_f1_threshold(y_val, validation_scores)
 
-        test_results[name] = {
-            "overall": calculate_metrics(
-                y_test, test_scores, threshold
-            )
-        }
-
-        # Report the normal Sep 9-10 dates and unusual Sep 11-18 tail separately.
-        sep_09_10_mask = (
-            test_timestamps < pd.Timestamp("2022-09-11")
-        ).to_numpy()
-        sep_11_18_mask = (
-            test_timestamps >= pd.Timestamp("2022-09-11")
-        ).to_numpy()
-
-        if sep_09_10_mask.any():
-            test_results[name]["sep_09_10"] = calculate_metrics(
-                y_test.iloc[sep_09_10_mask],
-                test_scores[sep_09_10_mask],
-                threshold,
-            )
-
-        if sep_11_18_mask.any():
-            test_results[name]["sep_11_18"] = calculate_metrics(
-                y_test.iloc[sep_11_18_mask],
-                test_scores[sep_11_18_mask],
-                threshold,
-            )
-
-        overall = test_results[name]["overall"]
-        print(f"\n{name} test results:")
-        print(f"  PR-AUC: {overall['average_precision_pr_auc']:.5f}")
-        print(f"  Precision: {overall['precision']:.5f}")
-        print(f"  Recall: {overall['recall']:.5f}")
-        print(f"  F1: {overall['f1']:.5f}")
-        print(f"  Alerts: {overall['alerts']:,}")
-
-    # Choose the leading model by validation PR-AUC, not test results.
-    selected_model = max(
-        validation_results,
-        key=lambda name: validation_results[name][
-            "average_precision_pr_auc"
-        ],
+    validation_metrics = calculate_metrics(
+        y_val,
+        validation_scores,
+        threshold,
     )
+
+    print("\nValidation results:")
+    print(
+        "  PR-AUC: "
+        f"{validation_metrics['average_precision_pr_auc']:.5f}"
+    )
+    print(f"  Precision: {validation_metrics['precision']:.5f}")
+    print(f"  Recall: {validation_metrics['recall']:.5f}")
+    print(f"  F1: {validation_metrics['f1']:.5f}")
+    print(f"  Validation-selected threshold: {threshold:.8f}")
+
+    del X_train, y_train, X_val, y_val
+
+    # Evaluate with that same validation-selected threshold on both periods.
+    evaluation_results = {}
+
+    for split_name in ["test", "stress_test"]:
+        X_raw, y = load_split(split_name)
+        print(f"Transforming {split_name} data...")
+        X = preprocessor.transform(X_raw)
+        del X_raw
+
+        scores = positive_class_scores(model, X)
+        metrics = calculate_metrics(y, scores, threshold)
+        evaluation_results[split_name] = metrics
+
+        print(f"\n{split_name} results:")
+        print(f"  PR-AUC: {metrics['average_precision_pr_auc']:.5f}")
+        print(f"  Precision: {metrics['precision']:.5f}")
+        print(f"  Recall: {metrics['recall']:.5f}")
+        print(f"  F1: {metrics['f1']:.5f}")
+        print(f"  Alerts: {metrics['alerts']:,}")
+
+        del X, y
 
     report = {
+        "model": "xgboost",
+        "evaluation_design": {
+            "train": "2022-09-01 through 2022-09-06",
+            "validation": "2022-09-07 through 2022-09-08",
+            "primary_test": "2022-09-09 through 2022-09-10",
+            "stress_test": "2022-09-11 through 2022-09-18",
+            "reason": (
+                "The Sep 11-18 period has a sharply different label rate "
+                "and much lower transaction volume, so it is reported "
+                "separately as a stress test."
+            ),
+        },
         "training": {
             "train_rows": int(train_rows),
             "positive_labels_in_train": int(train_positives),
             "xgboost_scale_pos_weight": float(scale_pos_weight),
-            "logistic_regression_max_iter": int(LOGISTIC_MAX_ITER),
-            "logistic_regression_iterations_used": logistic_iterations,
-            "logistic_regression_converged": logistic_converged,
+            "n_estimators": 150,
+            "max_depth": 6,
+            "learning_rate": 0.1,
         },
         "threshold_method": (
-            "Maximum F1 on validation data. This is a comparison baseline; "
-            "the product threshold should later reflect review capacity."
+            "Choose the threshold that maximizes F1 on validation data. "
+            "Apply that fixed threshold to the primary test and stress test "
+            "without retuning."
         ),
-        "validation_metrics": validation_results,
-        "test_metrics": test_results,
-        "selected_by_validation_pr_auc": selected_model,
+        "threshold": float(threshold),
+        "validation_metrics": validation_metrics,
+        "test_metrics": evaluation_results["test"],
+        "stress_test_metrics": evaluation_results["stress_test"],
         "notes": [
-            "Both models were trained from scratch in this run.",
-            "Preprocessing was fitted on training data only.",
-            "Thresholds were selected on validation data only.",
-            "Sep 11-18 is reported separately because its label rate is unusual.",
-            "Class-weighted model scores are ranking scores, not verified probabilities.",
+            "XGBoost is the only model trained and reported in this run.",
+            "Preprocessing is fitted on training data only.",
+            "Validation selects the threshold; neither test period selects it.",
+            "Sep 11-18 is a stress test, not a representative ordinary test.",
+            "The unusual label pattern is observed in the dataset; its cause "
+            "has not been established.",
+            "Model scores are not verified calibrated probabilities.",
         ],
     }
 
-    report_path = REPORT_DIR / "model_results.json"
-    report_path.write_text(
+    # Overwrite the XGBoost model, preprocessor, and current results report.
+    joblib.dump(model, MODEL_DIR / "xgboost.joblib")
+    joblib.dump(preprocessor, MODEL_DIR / "preprocessor.joblib")
+
+    results_path = REPORT_DIR / "model_results.json"
+    results_path.write_text(
         json.dumps(report, indent=2),
         encoding="utf-8",
     )
 
-    print(f"\nModels saved in: {MODEL_DIR}")
-    print(f"Results saved in: {report_path}")
+    # Remove the old Logistic Regression model so the product/repo has
+    # only the XGBoost model artifact.
+    logistic_path = MODEL_DIR / "logistic_regression.joblib"
+    if logistic_path.exists():
+        logistic_path.unlink()
+
+    print(f"\nXGBoost model saved in: {MODEL_DIR}")
+    print(f"Results overwritten at: {results_path}")
+    if logistic_path.exists():
+        print("Old logistic model file still exists.")
+    else:
+        print("Old logistic model file removed, if it was present.")
 
 
 if __name__ == "__main__":

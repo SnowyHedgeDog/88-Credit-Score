@@ -1,5 +1,5 @@
 FULL CSV DATA INSPECTION
-Generated: 2026-10-26T11:57:48+08:00
+Generated: 2026-10-29T02:18:45+08:00
 Data directory: C:\Users\darre\OneDrive\Documents\NUS SEM 5\IS4228\Project\cleaned\cleaned
 Every CSV row was scanned in chunks. No raw records are included.
 
@@ -120,11 +120,17 @@ VALIDATION: 2022-09-07 to 2022-09-08
   Laundering transactions: 1,036
   Laundering rate: 0.10730%
 
-TEST: 2022-09-09 to 2022-09-18
-  Dates: 10
-  Transactions: 863,896
-  Laundering transactions: 1,611
-  Laundering rate: 0.18648%
+PRIMARY TEST: 2022-09-09 to 2022-09-10
+  Dates: 2
+  Transactions: 862,788
+  Laundering transactions: 956
+  Laundering rate: 0.11080%
+
+STRESS TEST: 2022-09-11 to 2022-09-18
+  Dates: 8
+  Transactions: 1,108
+  Laundering transactions: 655
+  Laundering rate: 59.11552%
 
 TOTAL CHECKS
 Transaction rows: 5,078,336 (expected 5,078,336)

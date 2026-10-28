@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import average_precision_score
 
+
 PROJECT_DIR = Path(__file__).resolve().parent
 FEATURES_DIR = PROJECT_DIR / "cleaned" / "cleaned" / "features"
 MODELS_DIR = PROJECT_DIR / "models"
@@ -12,14 +13,8 @@ REPORTS_DIR = PROJECT_DIR / "reports"
 
 VALIDATION_FILE = FEATURES_DIR / "validation_features.csv"
 PREPROCESSOR_FILE = MODELS_DIR / "preprocessor.joblib"
+XGBOOST_FILE = MODELS_DIR / "xgboost.joblib"
 
-MODEL_FILES = {
-    "logistic_regression": MODELS_DIR / "logistic_regression.joblib",
-    "xgboost": MODELS_DIR / "xgboost.joblib",
-}
-
-# Apply the same numerical cutoffs to both models.
-# This shows what alert volume each cutoff produces.
 THRESHOLDS = [
     0.50,
     0.75,
@@ -41,14 +36,12 @@ NON_FEATURE_COLUMNS = {
 
 
 def get_positive_class_scores(model, transformed_features):
-    """Return each transaction's score for is_laundering = 1."""
     probabilities = model.predict_proba(transformed_features)
     positive_column = list(model.classes_).index(1)
     return probabilities[:, positive_column]
 
 
 def calculate_metrics(y_true, scores, threshold):
-    """Flag rows whose score is at least the specified threshold."""
     predictions = scores >= threshold
 
     true_positives = int(np.sum((predictions == 1) & (y_true == 1)))
@@ -57,16 +50,15 @@ def calculate_metrics(y_true, scores, threshold):
     true_negatives = int(np.sum((predictions == 0) & (y_true == 0)))
 
     alerts = true_positives + false_positives
-
     precision = true_positives / alerts if alerts else 0.0
     recall = (
         true_positives / (true_positives + false_negatives)
-        if (true_positives + false_negatives)
+        if true_positives + false_negatives
         else 0.0
     )
     f1 = (
         2 * precision * recall / (precision + recall)
-        if (precision + recall)
+        if precision + recall
         else 0.0
     )
 
@@ -84,7 +76,7 @@ def calculate_metrics(y_true, scores, threshold):
 
 
 def main():
-    for path in [VALIDATION_FILE, PREPROCESSOR_FILE, *MODEL_FILES.values()]:
+    for path in [VALIDATION_FILE, PREPROCESSOR_FILE, XGBOOST_FILE]:
         if not path.exists():
             raise FileNotFoundError(f"Could not find: {path}")
 
@@ -105,25 +97,22 @@ def main():
 
     print(f"  Rows: {len(validation):,}")
     print(f"  Laundering cases: {int(y_validation.sum()):,}")
-    print("Loading preprocessor and transforming validation features...")
 
     preprocessor = joblib.load(PREPROCESSOR_FILE)
-    X_validation_transformed = preprocessor.transform(X_validation)
+    model = joblib.load(XGBOOST_FILE)
+
+    print("Transforming validation features...")
+    X_transformed = preprocessor.transform(X_validation)
+    scores = get_positive_class_scores(model, X_transformed)
+    pr_auc = average_precision_score(y_validation, scores)
 
     results = []
 
-    for model_name, model_path in MODEL_FILES.items():
-        print(f"\nScoring with {model_name}...")
-        model = joblib.load(model_path)
-        scores = get_positive_class_scores(model, X_validation_transformed)
-
-        pr_auc = average_precision_score(y_validation, scores)
-
-        for threshold in THRESHOLDS:
-            row = calculate_metrics(y_validation, scores, threshold)
-            row["model"] = model_name
-            row["validation_pr_auc"] = pr_auc
-            results.append(row)
+    for threshold in THRESHOLDS:
+        row = calculate_metrics(y_validation, scores, threshold)
+        row["model"] = "xgboost"
+        row["validation_pr_auc"] = pr_auc
+        results.append(row)
 
     results_df = pd.DataFrame(results)
     results_df = results_df[
@@ -148,7 +137,7 @@ def main():
     pd.set_option("display.max_columns", None)
     pd.set_option("display.width", 200)
 
-    print("\nValidation results at each score threshold")
+    print("\nXGBoost validation results at each score threshold")
     print(
         results_df.to_string(
             index=False,
