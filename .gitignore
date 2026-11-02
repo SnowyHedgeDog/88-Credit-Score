@@ -11,3 +11,6 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+
+# AMLOps app: scored batches saved at runtime
+app/data/
