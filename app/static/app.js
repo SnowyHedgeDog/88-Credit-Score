@@ -1,4 +1,4 @@
-/* AMLOps analyst app — single-page front end (no build step). */
+/* RemitSentry analyst app — single-page front end (no build step). */
 import { scatterTransfers, flowGraph, lineChart, hbar } from "./charts.js";
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -61,9 +61,9 @@ const store = {
 
 async function refreshBatches(selectId) {
   state.batches = await api("/api/batches");
-  const wanted = selectId || state.batchId || store.get("amlops-batch");
+  const wanted = selectId || state.batchId || store.get("remitsentry-batch");
   state.batchId = state.batches.find((b) => b.id === wanted) ? wanted : state.batches[0]?.id || null;
-  if (state.batchId) store.set("amlops-batch", state.batchId);
+  if (state.batchId) store.set("remitsentry-batch", state.batchId);
   state.summary = state.batchId ? await api(`/api/batches/${state.batchId}/summary`) : null;
   state.accountsIndex = null;
   renderStrip();
@@ -108,7 +108,7 @@ $("#batch-select").addEventListener("change", async (e) => {
 $("#theme").addEventListener("click", () => {
   const root = document.documentElement;
   const next = root.dataset.theme === "light" ? "dark" : "light";
-  root.dataset.theme = next; store.set("amlops-theme", next);
+  root.dataset.theme = next; store.set("remitsentry-theme", next);
   $("#theme").textContent = next === "light" ? "Dark" : "Light";
   route();
 });
@@ -285,7 +285,7 @@ function renderVersus(r) {
   const el = $("#versus");
   const labelled = r.has_labels;
   el.innerHTML = `
-    <h2>Flat rule vs AMLOps on this batch</h2>
+    <h2>Flat rule vs RemitSentry on this batch</h2>
     <p class="lede" style="margin-bottom:14px">Small firms often flag any account that crosses a fixed amount or transfer count. Same batch, same accounts:</p>
     <div class="versus">
       <div>
@@ -298,7 +298,7 @@ function renderVersus(r) {
           <div class="line"><span>False alarms</span><b class="num critical">${r.rule_false}</b></div>` : ""}
       </div>
       <div>
-        <div class="muted">AMLOps: accounts scoring 7 or more</div>
+        <div class="muted">RemitSentry: accounts scoring 7 or more</div>
         <div class="big num" style="margin-top:12px">${r.app_alerts}</div><div class="muted">accounts to review</div>
         ${labelled ? `
           <div class="line"><span>Laundering accounts caught</span><b class="num">${r.app_caught} of ${r.labelled_laundering}</b></div>
@@ -607,7 +607,7 @@ async function openStr(a) {
     link.href = URL.createObjectURL(blob); link.download = `STR-draft-${a.key}.txt`; link.click();
     setTimeout(() => URL.revokeObjectURL(link.href), 1000);
   });
-  $("#str-filed").addEventListener("click", async () => { await decide(a, "filed", "STR filed from AMLOps draft"); closeDrawer(); });
+  $("#str-filed").addEventListener("click", async () => { await decide(a, "filed", "STR filed from RemitSentry draft"); closeDrawer(); });
 }
 function closeDrawer() {
   $("#drawer").classList.remove("open"); $("#scrim").classList.remove("open"); $("#drawer").setAttribute("aria-hidden", "true");

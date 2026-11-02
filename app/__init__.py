@@ -1,1 +1,1 @@
-"""AMLOps analyst app."""
+"""RemitSentry analyst app."""

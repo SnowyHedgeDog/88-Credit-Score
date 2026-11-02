@@ -225,7 +225,7 @@ svg .axis line, svg .axis path { stroke: var(--rule); }
 .legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 .legend i.line { width: 18px; height: 3px; border-radius: 2px; }
 
-/* ---------- Rules vs AMLOps ---------- */
+/* ---------- Rules vs RemitSentry ---------- */
 .versus { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border: 1px solid var(--rule); border-radius: var(--r-m); overflow: hidden; }
 .versus > div { padding: 18px 20px; }
 .versus > div + div { border-left: 1px solid var(--rule); background: color-mix(in srgb, var(--act) 6%, var(--panel)); }

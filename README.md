@@ -1,6 +1,6 @@
-# AMLOps
+# RemitSentry
 
-AMLOps flags customer accounts that may be laundering money, so a small compliance team knows which ones to check first.
+RemitSentry flags customer accounts that may be laundering money, so a small compliance team knows which ones to check first.
 
 It is built for small payment firms in Singapore, such as cross-border remittance companies.
 
@@ -38,7 +38,7 @@ No internet connection or API keys are needed.
 
 | Page | What it does |
 | --- | --- |
-| Batches | Upload transactions and customer CSVs, or load the sample batch. Compares AMLOps with simple threshold rules. |
+| Batches | Upload transactions and customer CSVs, or load the sample batch. Compares RemitSentry with simple threshold rules. |
 | Alert queue | All accounts ranked by risk score, with filters. |
 | Account | Score breakdown, customer profile, transactions, decision log, and a draft STR laid out like the STRO form. |
 | Money flow | Where money came from and went, up to two steps away. |

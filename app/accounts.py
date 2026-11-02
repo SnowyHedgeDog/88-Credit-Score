@@ -474,7 +474,7 @@ def str_draft(acc: dict, tx: pd.DataFrame, cu: pd.DataFrame, batch_meta: dict,
     add("Laid out in the section order of the STRO STR form on SONAR. Copy each field into SONAR,")
     add(f"check it, and complete every {TODO} field. This draft is not a filing.")
     add("")
-    add(f"Internal Reference No.:  AMLOPS-{batch_meta['id']}-{key}")
+    add(f"Internal Reference No.:  RS-{batch_meta['id']}-{key}")
     add(f"File via SONAR by:       {due:%A %d %B %Y}")
     add("                         5 business days after suspicion is established")
     add("                         (Guidelines to MAS Notice PSN01, para 18-1).")
@@ -559,7 +559,7 @@ def str_draft(acc: dict, tx: pd.DataFrame, cu: pd.DataFrame, batch_meta: dict,
     import textwrap
     for p in narrative:
         L.extend(textwrap.wrap(p, width=96, initial_indent="   ", subsequent_indent="   "))
-    add("   Supporting documents:        Transactions .csv (download from the account page in AMLOps)")
+    add("   Supporting documents:        Transactions .csv (download from the account page in RemitSentry)")
     add("")
     add("8. FOLLOW-UP STR")
     add(f"   Is this a follow-up STR?     No {TODO} If yes, give the preceding STR reference number")

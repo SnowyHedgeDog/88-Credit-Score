@@ -1,4 +1,4 @@
-"""AMLOps analyst app: FastAPI backend that serves the single-page front end.
+"""RemitSentry analyst app: FastAPI backend that serves the single-page front end.
 
 Run from the repo root:
     python -m app.server            (then open http://localhost:8000)
@@ -31,7 +31,7 @@ STATIC = APP_DIR / "static"
 DEMO = APP_DIR / "demo"
 SGT = ZoneInfo("Asia/Singapore")
 
-app = FastAPI(title="AMLOps")
+app = FastAPI(title="RemitSentry")
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 

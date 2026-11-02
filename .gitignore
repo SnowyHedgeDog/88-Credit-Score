@@ -12,5 +12,5 @@ __pycache__/
 .venv/
 venv/
 
-# AMLOps app: scored batches saved at runtime
+# RemitSentry app: scored batches saved at runtime
 app/data/
