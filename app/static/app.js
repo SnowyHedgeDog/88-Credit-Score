@@ -623,59 +623,48 @@ const AMOUNT_STEPS = [0, 100, 500, 1000, 2000, 5000, 10000, 20000, 50000];
 async function pageFlow(arg, params, token) {
   const idx = await accountsIndex();
   if (!idx.length) { view.innerHTML = emptyState(); return; }
-  const all = params.get("view") === "all";
   const center = arg || idx[0].key;
   const hops = Number(params.get("hops") || 2);
   const minIdx = Number(params.get("min") ?? 3);
   view.innerHTML = `
     <div class="page-head">
       <h1>Money flow</h1>
-      <p class="lede">${all ? "Every high-risk account and the money moving between them, so suspected rings stand out at once. Click a customer to trace its money; double-click to open it." : "Who sent money to an account, where it went next, and which of those counterparties are high risk themselves. Click a customer to re-centre; double-click to open it."}</p>
+      <p class="lede">Who sent money to an account, where it went next, and which of those counterparties are high risk themselves. Click a customer to re-centre; double-click to open it.</p>
     </div>
     <div class="row" style="align-items:flex-end;margin-bottom:12px;gap:20px">
-      <div class="field"><span>View</span><div class="seg">
-        <button type="button" data-v="one" aria-pressed="${!all}">One account</button>
-        <button type="button" data-v="all" aria-pressed="${all}">All high-risk accounts</button></div></div>
-      ${all ? "" : `<label class="field" style="flex:1;min-width:280px;max-width:440px"><span>Centre on</span>
+      <label class="field" style="flex:1;min-width:280px;max-width:440px"><span>Centre on</span>
         <select id="c-sel">${idx.map((r) => `<option value="${esc(r.key)}" ${r.key === center ? "selected" : ""}>${r.score}  ${esc(r.key)}${r.name ? "  " + esc(r.name) : ""}</option>`).join("")}</select></label>
       <div class="field"><span>Reach</span><div class="seg">
         <button type="button" data-h="1" aria-pressed="${hops === 1}">Direct only</button>
-        <button type="button" data-h="2" aria-pressed="${hops === 2}">Two steps</button></div></div>`}
+        <button type="button" data-h="2" aria-pressed="${hops === 2}">Two steps</button></div></div>
       <label class="field" style="width:240px"><span>Hide transfers below <b id="min-lab">${money(AMOUNT_STEPS[minIdx])}</b> in total</span>
         <input type="range" id="min-r" min="0" max="${AMOUNT_STEPS.length - 1}" value="${minIdx}"></label>
-      ${all ? "" : `<a class="btn" href="#/account/${encodeURIComponent(center)}">Open account</a>`}
+      <a class="btn" href="#/account/${encodeURIComponent(center)}">Open account</a>
     </div>
     <div class="legend">
       <span><i style="background:var(--critical)"></i>Critical customer</span><span><i style="background:var(--watch)"></i>Watch</span>
       <span><i style="background:var(--clear)"></i>Clear</span><span><i style="background:var(--external);border-radius:2px"></i>Outside our book (other bank or overseas)</span>
       <span><i class="line" style="background:var(--critical)"></i>Includes a transfer scored 0.75+</span><span>Thicker line, more money. Arrows show direction.</span>
     </div>
-    <div class="flow-box" id="flow" style="${all ? "height:700px" : ""}"><div class="tip" id="tip"></div></div>
+    <div class="flow-box" id="flow"><div class="tip" id="tip"></div></div>
     <section class="section"><h2>Flows in this view</h2>
       <div class="table-wrap" style="max-height:50vh"><table>
         <thead><tr><th>From</th><th class="r">Score</th><th>To</th><th class="r">Score</th><th class="r">Total</th><th class="r">Transfers</th><th class="r">Scored 0.75+</th><th>First</th><th>Last</th></tr></thead>
         <tbody id="f-rows"></tbody></table></div></section>`;
 
   const setParams = (h, mi, c = center) => go(`#/flow/${encodeURIComponent(c)}?hops=${h}&min=${mi}`);
-  view.querySelectorAll("[data-v]").forEach((b) => b.addEventListener("click", () =>
-    b.dataset.v === "all" ? go(`#/flow?view=all&min=${minIdx}`) : setParams(hops, minIdx)));
-  if (!all) {
-    $("#c-sel").addEventListener("change", (e) => setParams(hops, minIdx, e.target.value));
-    view.querySelectorAll("[data-h]").forEach((b) => b.addEventListener("click", () => setParams(Number(b.dataset.h), minIdx)));
-  }
+  $("#c-sel").addEventListener("change", (e) => setParams(hops, minIdx, e.target.value));
+  view.querySelectorAll("[data-h]").forEach((b) => b.addEventListener("click", () => setParams(Number(b.dataset.h), minIdx)));
   $("#min-r").addEventListener("input", (e) => { $("#min-lab").textContent = money(AMOUNT_STEPS[e.target.value]); });
-  $("#min-r").addEventListener("change", (e) => all ? go(`#/flow?view=all&min=${e.target.value}`) : setParams(hops, Number(e.target.value)));
+  $("#min-r").addEventListener("change", (e) => setParams(hops, Number(e.target.value)));
 
-  const g = await api(all
-    ? `/api/batches/${state.batchId}/network?min_amount=${AMOUNT_STEPS[minIdx]}`
-    : `/api/batches/${state.batchId}/graph?center=${encodeURIComponent(center)}&hops=${hops}&min_amount=${AMOUNT_STEPS[minIdx]}`);
+  const g = await api(`/api/batches/${state.batchId}/graph?center=${encodeURIComponent(center)}&hops=${hops}&min_amount=${AMOUNT_STEPS[minIdx]}`);
   if (token !== routeToken) return;
   const byId = Object.fromEntries(g.nodes.map((n) => [n.id, n]));
   flowGraph($("#flow"), g, {
     onRecentre: (id) => setParams(hops, minIdx, id),
     onOpen: (id) => go(`#/account/${encodeURIComponent(id)}`),
     money,
-    dense: all,
   });
   const sc = (id) => byId[id]?.score == null ? '<span class="faint">outside</span>' : `<b class="${byId[id].kind}">${byId[id].score}</b>`;
   const name = (id) => byId[id]?.kind === "external" ? `<span class="muted">${esc(id)}</span>` : `<a href="#/account/${encodeURIComponent(id)}">${esc(id)}</a>${byId[id]?.label && byId[id].label !== id ? ` <span class="faint">${esc(byId[id].label)}</span>` : ""}`;

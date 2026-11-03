@@ -41,7 +41,7 @@ No internet connection or API keys are needed.
 | Batches | Upload transactions and customer CSVs, or load the sample batch. Compares RemitSentry with simple threshold rules. |
 | Alert queue | All accounts ranked by risk score, with filters. |
 | Account | Score breakdown, customer profile, transactions, decision log, and a draft STR laid out like the STRO form. |
-| Money flow | Where money came from and went, up to two steps away, or a map of all high-risk accounts at once. |
+| Money flow | Where money came from and went, up to two steps away. |
 
 ## Account scoring
 

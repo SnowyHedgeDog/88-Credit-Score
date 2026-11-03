@@ -406,18 +406,6 @@ def _edge_table(tx: pd.DataFrame) -> pd.DataFrame:
               .reset_index())
 
 
-def money_network(tx: pd.DataFrame, accounts: dict, min_amount: float, limit: int = 150):
-    """Every flow that touches a critical account, or runs between two watch-or-higher accounts."""
-    score = {k: a["score"] for k, a in accounts.items()}
-    edges = _edge_table(tx)
-    edges = edges[(edges["total"] >= min_amount) & (edges["sender_account_key"] != edges["receiver_account_key"])]
-    s = edges["sender_account_key"].map(score).fillna(0)
-    r = edges["receiver_account_key"].map(score).fillna(0)
-    view = edges[(s >= CRITICAL_AT) | (r >= CRITICAL_AT) | ((s >= WATCH_AT) & (r >= WATCH_AT))]
-    view = view.sort_values(["flagged", "total"], ascending=False).head(limit)
-    return _graph_payload(view, accounts, None)
-
-
 def money_flow(tx: pd.DataFrame, accounts: dict, center: str, hops: int, min_amount: float):
     edges = (tx.groupby(["sender_account_key", "receiver_account_key"])
                .agg(total=("amount_sgd", "sum"), n=("txn_id", "size"),

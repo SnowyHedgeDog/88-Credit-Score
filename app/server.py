@@ -23,7 +23,6 @@ from pydantic import BaseModel
 from . import store
 from .accounts import (CRITICAL_AT, REASON_TITLES, STR_BUSINESS_DAYS, WATCH_AT, add_business_days,
                        account_transactions_csv, build_accounts, business_days_between, money_flow,
-                       money_network,
                        rules_vs_model, str_draft)
 from .scoring import BatchError, load_model, score_batch
 
@@ -285,12 +284,6 @@ def decide(batch_id: str, key: str, body: Decision):
         "at": datetime.now(SGT).strftime("%d %b %Y, %H:%M SGT"),
     }
     return ok(store.save_decision(batch_id, key, entry).get(key))
-
-
-@app.get("/api/batches/{batch_id}/network")
-def network(batch_id: str, min_amount: float = 1000):
-    data = get_batch(batch_id)
-    return ok(money_network(data["tx"], data["accounts"], min_amount))
 
 
 @app.get("/api/batches/{batch_id}/graph")
