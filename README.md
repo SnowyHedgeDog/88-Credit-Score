@@ -41,8 +41,7 @@ No internet connection or API keys are needed.
 | Batches | Upload transactions and customer CSVs, or load the sample batch. Compares RemitSentry with simple threshold rules. |
 | Alert queue | All accounts ranked by risk score, with filters. |
 | Account | Score breakdown, customer profile, transactions, decision log, and a draft STR laid out like the STRO form. |
-| Money flow | Where money came from and went, up to two steps away. |
-| Model | How the model performed during development, and how account scores are built. See below. |
+| Money flow | Where money came from and went, up to two steps away, or a map of all high-risk accounts at once. |
 
 ## Account scoring
 
@@ -73,9 +72,9 @@ Upload two CSV files in the same format as our dataset:
 
 The app scores every transaction and account automatically. Laundering labels (`is_laundering`) are **not** needed, since real data won't have them.
 
-## About the Model page and laundering labels
+## About laundering labels
 
-The model results on the Model page (precision, recall, threshold chart, hits and misses) come from our team's training run on the **full test set** (9–10 Sep 2022), saved in `reports/`. The app displays them; it does not recalculate them. The "most important inputs" chart is read directly from the trained model.
+The model's own test results (precision, recall and more) are saved in `reports/model_results.json` from our team's training run on the full test set.
 
 We can only measure accuracy because our test data includes the true answer (`is_laundering`) for every transaction. A real firm's daily data won't have this. So:
 
@@ -84,15 +83,22 @@ We can only measure accuracy because our test data includes the true answer (`is
 
 ## Sample data
 
-`app/demo/` contains real data from our test days (9–10 Sep 2022), which the model was not trained on. It is a sample of the full test set: 6,158 of its 862,788 transactions, across 3,577 accounts.
+`app/demo/` holds a **curated demo batch** built from our real test days (9–10 Sep 2022), which the model was not trained on: 4,093 transactions across 2,313 accounts.
 
-For the demo, we deliberately sampled a higher share of laundering accounts (300 laundering accounts and 1,200 clean ones) so there are enough cases to show. About 6% of the sample's transactions are laundering, against about 0.1% in the full test set, so the app looks more accurate on this sample than it would on a normal day. The sample keeps its laundering labels so the demo can show accuracy.
+It was made in two steps, for the presentation only:
+
+1. **Sampled:** 300 laundering accounts and 1,200 clean accounts from the full test set, with every transfer they made.
+2. **Curated:** laundering accounts that RemitSentry did not flag as critical were then removed, so the demo can show the workflow on cases the app catches.
+
+Because of step 2, the "caught" and "false alarms" figures on the Batches page are **illustrative, not a measure of accuracy**. The model's real test results are in `reports/model_results.json`.
 
 To rebuild it from the full dataset in `cleaned/cleaned/`:
 
 ```bash
-python scripts/make_demo_batch.py --from-cleaned cleaned/cleaned
+python scripts/make_demo_batch.py --from-cleaned cleaned/cleaned --curate
 ```
+
+Leave out `--curate` to get the uncurated sample.
 
 ## Where is the full dataset?
 

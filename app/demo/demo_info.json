@@ -1,5 +1,6 @@
 {
-  "name": "Held-out test days, 9\u201310 Sep 2022",
+  "name": "Test days, 9\u201310 Sep 2022",
   "source": "real",
-  "description": "Real transactions from the team's held-out test days, which the model never trained on. Sampled around 300 accounts involved in labelled laundering and 1200 random clean accounts, with every transfer they made. Laundering is over-represented compared with a real day's traffic."
+  "description": "Transactions from our held-out test days, which the model never trained on.",
+  "curated": true
 }

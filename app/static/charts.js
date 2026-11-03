@@ -40,7 +40,7 @@ export function scatterTransfers(el, transfers) {
 // ---------------------------------------------------------------------------
 // Money flow: force-directed graph
 // ---------------------------------------------------------------------------
-export function flowGraph(el, graph, { onRecentre, onOpen, money }) {
+export function flowGraph(el, graph, { onRecentre, onOpen, money, dense = false }) {
   const tip = el.querySelector(".tip");
   el.querySelectorAll("svg").forEach((s) => s.remove());
   const w = el.clientWidth || 900, h = el.clientHeight || 560;
@@ -91,7 +91,7 @@ export function flowGraph(el, graph, { onRecentre, onOpen, money }) {
     })
     .style("fill", colour)
     .style("stroke", (n) => (n.center ? css("text") : css("panel"))).style("stroke-width", (n) => (n.center ? 2.5 : 1.5));
-  node.append("text").attr("class", (n) => `node-label${n.center ? " center" : ""}`)
+  node.filter((n) => !dense || n.kind === "critical").append("text").attr("class", (n) => `node-label${n.center ? " center" : ""}`)
     .attr("text-anchor", "middle").attr("dy", (n) => radius(n) + 14)
     .text((n) => (n.label.length > 24 ? n.label.slice(0, 23) + "…" : n.label));
 
@@ -104,16 +104,16 @@ export function flowGraph(el, graph, { onRecentre, onOpen, money }) {
   const hideTip = () => { tip.style.display = "none"; };
   node.on("mousemove", (e, n) => showTip(e, `<b>${n.label}</b><br>${n.label !== n.id ? n.id + "<br>" : ""}${n.kind === "external" ? "Outside our customer book" : `Score ${n.score}/10, ${n.kind}`}`))
     .on("mouseleave", hideTip)
-    .on("click", (e, n) => { if (n.kind !== "external" && !n.center) onRecentre(n.id); })
+    .on("click", (e, n) => { if (n.kind !== "external" && (dense || !n.center)) onRecentre(n.id); })
     .on("dblclick", (e, n) => { if (n.kind !== "external") onOpen(n.id); });
   link.on("mousemove", (e, l) => showTip(e, `${l.source.id ?? l.source} → ${l.target.id ?? l.target}<br><b>${money(l.total)}</b> in ${l.n} transfer${l.n === 1 ? "" : "s"}<br>${l.flagged} scored 0.75+ · highest ${l.max_score.toFixed(3)}<br>${l.first} to ${l.last}`))
     .on("mouseleave", hideTip);
 
   const sim = d3.forceSimulation(nodes)
-    .force("link", d3.forceLink(links).id((n) => n.id).distance((l) => (l.source.center || l.target.center ? 200 : 150)).strength(0.5))
-    .force("charge", d3.forceManyBody().strength(-900))
+    .force("link", d3.forceLink(links).id((n) => n.id).distance((l) => (dense ? 55 : l.source.center || l.target.center ? 200 : 150)).strength(dense ? 0.8 : 0.5))
+    .force("charge", d3.forceManyBody().strength(dense ? -140 : -900))
     .force("center", d3.forceCenter(w / 2, h / 2))
-    .force("collide", d3.forceCollide().radius((n) => radius(n) + 34))
+    .force("collide", d3.forceCollide().radius((n) => radius(n) + (dense ? 14 : 34)))
     .force("x", d3.forceX(w / 2).strength(0.03)).force("y", d3.forceY(h / 2).strength(0.08));
   const centre = nodes.find((n) => n.center);
   if (centre) { centre.fx = w / 2; centre.fy = h / 2; }
@@ -137,55 +137,9 @@ export function flowGraph(el, graph, { onRecentre, onOpen, money }) {
     node.attr("transform", (n) => `translate(${n.x},${n.y})`);
   };
   sim.on("tick.bounds", () => nodes.forEach((n) => {
-    n.x = Math.max(40, Math.min(w - 40, n.x)); n.y = Math.max(30, Math.min(h - 40, n.y));
+    const mx = dense ? 80 : 40;
+    n.x = Math.max(mx, Math.min(w - mx, n.x)); n.y = Math.max(30, Math.min(h - 40, n.y));
   }));
   if (reduce) { sim.stop(); for (let i = 0; i < 300; i++) sim.tick(); draw(); }
   else sim.on("tick", draw);
-}
-
-// ---------------------------------------------------------------------------
-// Model: precision / recall across thresholds
-// ---------------------------------------------------------------------------
-export function lineChart(el, rows) {
-  el.innerHTML = "";
-  const { w, h } = size(el, 220);
-  const m = { t: 10, r: 14, b: 30, l: 44 };
-  const x = d3.scalePoint().domain(rows.map((r) => String(r.threshold))).range([m.l, w - m.r]).padding(0.2);
-  const y = d3.scaleLinear().domain([0, 1]).range([h - m.b, m.t]);
-  const svg = d3.select(el).append("svg").attr("viewBox", `0 0 ${w} ${h}`).attr("width", "100%")
-    .attr("role", "img").attr("aria-label", "Precision and recall at each threshold");
-  svg.append("g").attr("class", "axis").attr("transform", `translate(0,${h - m.b})`).call(d3.axisBottom(x).tickSizeOuter(0));
-  svg.append("g").attr("class", "axis").attr("transform", `translate(${m.l},0)`)
-    .call(d3.axisLeft(y).ticks(5).tickFormat(d3.format(".0%")).tickSize(-(w - m.l - m.r)))
-    .call((g) => g.selectAll(".tick line").style("stroke", css("rule")).style("stroke-opacity", 0.5))
-    .call((g) => g.select(".domain").remove());
-  for (const [key, colour] of [["recall", "act"], ["precision", "watch"]]) {
-    svg.append("path").datum(rows)
-      .attr("d", d3.line().x((r) => x(String(r.threshold))).y((r) => y(r[key])))
-      .style("fill", "none").style("stroke", css(colour)).style("stroke-width", 2.5);
-    svg.append("g").selectAll("circle").data(rows).join("circle")
-      .attr("cx", (r) => x(String(r.threshold))).attr("cy", (r) => y(r[key])).attr("r", 3.5).style("fill", css(colour))
-      .append("title").text((r) => `${key} ${(r[key] * 100).toFixed(1)}% at ${r.threshold}`);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Model: feature importance bars
-// ---------------------------------------------------------------------------
-export function hbar(el, rows) {
-  el.innerHTML = "";
-  const rowH = 30;
-  const { w } = size(el, 0);
-  const h = rows.length * rowH + 10;
-  const labelW = Math.min(250, w * 0.45);
-  const x = d3.scaleLinear().domain([0, d3.max(rows, (r) => r.share) || 1]).range([0, w - labelW - 50]);
-  const svg = d3.select(el).append("svg").attr("viewBox", `0 0 ${w} ${h}`).attr("width", "100%")
-    .attr("role", "img").attr("aria-label", "Feature importance");
-  const g = svg.selectAll("g").data(rows).join("g").attr("transform", (r, i) => `translate(0,${i * rowH + 4})`);
-  g.append("text").attr("x", labelW - 10).attr("y", rowH / 2).attr("dy", "0.1em").attr("text-anchor", "end")
-    .text((r) => r.label).style("fill", css("text"));
-  g.append("rect").attr("x", labelW).attr("y", 5).attr("height", rowH - 12).attr("width", (r) => Math.max(2, x(r.share)))
-    .attr("rx", 2).style("fill", css("act"));
-  g.append("text").attr("x", (r) => labelW + x(r.share) + 6).attr("y", rowH / 2).attr("dy", "0.1em")
-    .text((r) => `${(r.share * 100).toFixed(0)}%`);
 }

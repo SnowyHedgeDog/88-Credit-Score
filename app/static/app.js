@@ -1,5 +1,5 @@
 /* RemitSentry analyst app — single-page front end (no build step). */
-import { scatterTransfers, flowGraph, lineChart, hbar } from "./charts.js";
+import { scatterTransfers, flowGraph } from "./charts.js";
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const view = $("#view");
@@ -130,9 +130,9 @@ async function route() {
   const token = ++routeToken;
   document.querySelectorAll("nav.tabs a").forEach((a) => { if (a.dataset.page !== page) a.removeAttribute("aria-current"); else a.setAttribute("aria-current", "page"); });
   closeDrawer();
-  const pages = { batches: pageBatches, queue: pageQueue, account: pageAccount, flow: pageFlow, model: pageModel };
+  const pages = { batches: pageBatches, queue: pageQueue, account: pageAccount, flow: pageFlow };
   const fn = pages[page] || pageBatches;
-  if (!state.batchId && page !== "batches" && page !== "model") {
+  if (!state.batchId && page !== "batches") {
     view.innerHTML = emptyState();
     return;
   }
@@ -623,48 +623,59 @@ const AMOUNT_STEPS = [0, 100, 500, 1000, 2000, 5000, 10000, 20000, 50000];
 async function pageFlow(arg, params, token) {
   const idx = await accountsIndex();
   if (!idx.length) { view.innerHTML = emptyState(); return; }
+  const all = params.get("view") === "all";
   const center = arg || idx[0].key;
   const hops = Number(params.get("hops") || 2);
   const minIdx = Number(params.get("min") ?? 3);
   view.innerHTML = `
     <div class="page-head">
       <h1>Money flow</h1>
-      <p class="lede">Who sent money to an account, where it went next, and which of those counterparties are high risk themselves. Click a customer to re-centre; double-click to open it.</p>
+      <p class="lede">${all ? "Every high-risk account and the money moving between them, so suspected rings stand out at once. Click a customer to trace its money; double-click to open it." : "Who sent money to an account, where it went next, and which of those counterparties are high risk themselves. Click a customer to re-centre; double-click to open it."}</p>
     </div>
     <div class="row" style="align-items:flex-end;margin-bottom:12px;gap:20px">
-      <label class="field" style="flex:1;min-width:280px;max-width:440px"><span>Centre on</span>
+      <div class="field"><span>View</span><div class="seg">
+        <button type="button" data-v="one" aria-pressed="${!all}">One account</button>
+        <button type="button" data-v="all" aria-pressed="${all}">All high-risk accounts</button></div></div>
+      ${all ? "" : `<label class="field" style="flex:1;min-width:280px;max-width:440px"><span>Centre on</span>
         <select id="c-sel">${idx.map((r) => `<option value="${esc(r.key)}" ${r.key === center ? "selected" : ""}>${r.score}  ${esc(r.key)}${r.name ? "  " + esc(r.name) : ""}</option>`).join("")}</select></label>
       <div class="field"><span>Reach</span><div class="seg">
         <button type="button" data-h="1" aria-pressed="${hops === 1}">Direct only</button>
-        <button type="button" data-h="2" aria-pressed="${hops === 2}">Two steps</button></div></div>
+        <button type="button" data-h="2" aria-pressed="${hops === 2}">Two steps</button></div></div>`}
       <label class="field" style="width:240px"><span>Hide transfers below <b id="min-lab">${money(AMOUNT_STEPS[minIdx])}</b> in total</span>
         <input type="range" id="min-r" min="0" max="${AMOUNT_STEPS.length - 1}" value="${minIdx}"></label>
-      <a class="btn" href="#/account/${encodeURIComponent(center)}">Open account</a>
+      ${all ? "" : `<a class="btn" href="#/account/${encodeURIComponent(center)}">Open account</a>`}
     </div>
     <div class="legend">
       <span><i style="background:var(--critical)"></i>Critical customer</span><span><i style="background:var(--watch)"></i>Watch</span>
       <span><i style="background:var(--clear)"></i>Clear</span><span><i style="background:var(--external);border-radius:2px"></i>Outside our book (other bank or overseas)</span>
       <span><i class="line" style="background:var(--critical)"></i>Includes a transfer scored 0.75+</span><span>Thicker line, more money. Arrows show direction.</span>
     </div>
-    <div class="flow-box" id="flow"><div class="tip" id="tip"></div></div>
+    <div class="flow-box" id="flow" style="${all ? "height:700px" : ""}"><div class="tip" id="tip"></div></div>
     <section class="section"><h2>Flows in this view</h2>
       <div class="table-wrap" style="max-height:50vh"><table>
         <thead><tr><th>From</th><th class="r">Score</th><th>To</th><th class="r">Score</th><th class="r">Total</th><th class="r">Transfers</th><th class="r">Scored 0.75+</th><th>First</th><th>Last</th></tr></thead>
         <tbody id="f-rows"></tbody></table></div></section>`;
 
   const setParams = (h, mi, c = center) => go(`#/flow/${encodeURIComponent(c)}?hops=${h}&min=${mi}`);
-  $("#c-sel").addEventListener("change", (e) => setParams(hops, minIdx, e.target.value));
-  view.querySelectorAll("[data-h]").forEach((b) => b.addEventListener("click", () => setParams(Number(b.dataset.h), minIdx)));
+  view.querySelectorAll("[data-v]").forEach((b) => b.addEventListener("click", () =>
+    b.dataset.v === "all" ? go(`#/flow?view=all&min=${minIdx}`) : setParams(hops, minIdx)));
+  if (!all) {
+    $("#c-sel").addEventListener("change", (e) => setParams(hops, minIdx, e.target.value));
+    view.querySelectorAll("[data-h]").forEach((b) => b.addEventListener("click", () => setParams(Number(b.dataset.h), minIdx)));
+  }
   $("#min-r").addEventListener("input", (e) => { $("#min-lab").textContent = money(AMOUNT_STEPS[e.target.value]); });
-  $("#min-r").addEventListener("change", (e) => setParams(hops, Number(e.target.value)));
+  $("#min-r").addEventListener("change", (e) => all ? go(`#/flow?view=all&min=${e.target.value}`) : setParams(hops, Number(e.target.value)));
 
-  const g = await api(`/api/batches/${state.batchId}/graph?center=${encodeURIComponent(center)}&hops=${hops}&min_amount=${AMOUNT_STEPS[minIdx]}`);
+  const g = await api(all
+    ? `/api/batches/${state.batchId}/network?min_amount=${AMOUNT_STEPS[minIdx]}`
+    : `/api/batches/${state.batchId}/graph?center=${encodeURIComponent(center)}&hops=${hops}&min_amount=${AMOUNT_STEPS[minIdx]}`);
   if (token !== routeToken) return;
   const byId = Object.fromEntries(g.nodes.map((n) => [n.id, n]));
   flowGraph($("#flow"), g, {
     onRecentre: (id) => setParams(hops, minIdx, id),
     onOpen: (id) => go(`#/account/${encodeURIComponent(id)}`),
     money,
+    dense: all,
   });
   const sc = (id) => byId[id]?.score == null ? '<span class="faint">outside</span>' : `<b class="${byId[id].kind}">${byId[id].score}</b>`;
   const name = (id) => byId[id]?.kind === "external" ? `<span class="muted">${esc(id)}</span>` : `<a href="#/account/${encodeURIComponent(id)}">${esc(id)}</a>${byId[id]?.label && byId[id].label !== id ? ` <span class="faint">${esc(byId[id].label)}</span>` : ""}`;
@@ -674,118 +685,6 @@ async function pageFlow(arg, params, token) {
       <td class="r num">${money(l.total, 2)}</td><td class="r num">${l.n}</td><td class="r num ${l.flagged ? "critical" : "faint"}">${l.flagged}</td>
       <td class="num">${esc(l.first)}</td><td class="num">${esc(l.last)}</td></tr>`).join("")
     : `<tr><td colspan="9" class="empty">No transfers above ${money(AMOUNT_STEPS[minIdx])}. Lower the amount filter.</td></tr>`;
-}
-
-// ---------------------------------------------------------------------------
-// Model
-// ---------------------------------------------------------------------------
-async function pageModel(_arg, _params, token) {
-  const [rep, truth] = await Promise.all([
-    api("/api/model"),
-    state.batchId && state.summary?.meta.has_labels ? api(`/api/batches/${state.batchId}/truth`) : null,
-  ]);
-  if (token !== routeToken) return;
-  const r = rep.results;
-  const t = r.test_metrics, v = r.validation_metrics, st = r.stress_test_metrics;
-  const testRows = t.confusion_matrix[0][0] + t.confusion_matrix[0][1] + t.confusion_matrix[1][0] + t.confusion_matrix[1][1];
-  const base = t.actual_laundering / testRows;
-  const per100 = (x) => Math.round(x * 100);
-  const period = (k) => r.evaluation_design[k].replace(/2022-09-0?(\d+)/g, "$1").replace(" through ", "–") + " Sep 2022";
-  const metricRow = (label, m, note) => `<tr><td><b>${label}</b><br><span class="faint">${note}</span></td>
-    <td class="r num">${pct(m.precision)}</td><td class="r num">${pct(m.recall)}</td><td class="r num">${m.f1.toFixed(3)}</td>
-    <td class="r num">${m.average_precision_pr_auc.toFixed(3)}</td><td class="r num">${m.roc_auc?.toFixed(3) ?? "—"}</td>
-    <td class="r num">${m.alerts.toLocaleString()}</td><td class="r num">${m.actual_laundering.toLocaleString()}</td></tr>`;
-  const [[tn, fp], [fn, tp]] = t.confusion_matrix;
-
-  view.innerHTML = `
-    <div class="page-head">
-      <h1>Model</h1>
-      <p class="lede">How well the transaction model separates laundering from clean transfers on data it never trained on, and how the app turns its scores into account scores.</p>
-    </div>
-    <div class="note">Figures come from the team's training run (reports/model_results.json). The model trained on 1–6 Sep 2022, chose its threshold on 7–8 Sep, and was tested on 9–10 Sep.</div>
-
-    <h2>XGBoost, the model in use</h2>
-    <p class="metric-line">On the held-out test days, of every 100 transfers the model alerts on, <b>${per100(t.precision)}</b> really are laundering. That is ${Math.round(t.precision / base)} times the base rate of ${pct(base, 2)}. Of every 100 laundering transfers it catches <b>${per100(t.recall)}</b> at this threshold, while reviewing only ${pct(t.alerts / testRows, 2)} of all transfers. ROC-AUC is <b>${t.roc_auc.toFixed(2)}</b>.</p>
-    <p class="muted" style="max-width:70ch">${r.training.train_rows.toLocaleString()} training transfers, ${r.training.positive_labels_in_train.toLocaleString()} of them laundering (${pct(r.training.positive_labels_in_train / r.training.train_rows, 2)}). Threshold ${r.threshold.toFixed(4)}, chosen to maximise F1 on validation and not retuned on test.</p>
-
-    <div class="grid-main section" style="margin-top:20px">
-      <div>
-        <h2>Results by period</h2>
-        <div class="table-wrap"><table>
-          <thead><tr><th>Period</th><th class="r">Precision</th><th class="r">Recall</th><th class="r">F1</th><th class="r">PR-AUC</th><th class="r">ROC-AUC</th><th class="r">Alerts</th><th class="r">Laundering</th></tr></thead>
-          <tbody>
-            ${metricRow("Validation", v, period("validation"))}
-            ${metricRow("Test", t, period("primary_test"))}
-            ${metricRow("Stress test", st, period("stress_test"))}
-          </tbody></table></div>
-        <p class="faint" style="font-size:12.5px">The stress-test days have only ${(st.confusion_matrix.flat().reduce((a, b) => a + b, 0)).toLocaleString()} transfers and a ${pct(st.actual_laundering / st.confusion_matrix.flat().reduce((a, b) => a + b, 0), 0)} laundering rate, far from normal traffic, so they are reported separately. Accuracy is not shown: a model that flags nothing is ${pct(1 - base, 1)} accurate on the test days.</p>
-      </div>
-      <div>
-        <h2>Hits and misses on the test days</h2>
-        <div class="cm">
-          <div></div><div class="head">Model said clean</div><div class="head">Model alerted</div>
-          <div class="lab">Actually clean</div>
-          <div class="cell" style="border-color:var(--clear)"><b>${tn.toLocaleString()}</b><span class="muted">correctly cleared</span></div>
-          <div class="cell" style="border-color:var(--watch)"><b>${fp.toLocaleString()}</b><span class="muted">false alarms</span></div>
-          <div class="lab">Actually laundering</div>
-          <div class="cell" style="border-color:var(--critical)"><b>${fn.toLocaleString()}</b><span class="muted">missed</span></div>
-          <div class="cell" style="border-color:var(--act)"><b>${tp.toLocaleString()}</b><span class="muted">caught</span></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="grid-2 section">
-      <div><h2>Moving the threshold (validation)</h2>
-        <p class="muted" style="margin-top:-6px">Lower thresholds catch more laundering but bury analysts in alerts. The app uses the lower bands as supporting evidence on accounts instead.</p>
-        <div class="legend"><span><i class="line" style="background:var(--act)"></i>Recall</span><span><i class="line" style="background:var(--watch)"></i>Precision</span></div>
-        <div id="thr-chart"></div>
-        <div class="table-wrap" style="margin-top:10px"><table>
-          <thead><tr><th class="r">Threshold</th><th class="r">Alerts</th><th class="r">Caught</th><th class="r">Precision</th><th class="r">Recall</th></tr></thead>
-          <tbody>${rep.threshold_table.filter((x) => x.alerts > 0).map((x) => `<tr><td class="r num">${x.threshold}</td><td class="r num">${x.alerts.toLocaleString()}</td><td class="r num">${x.true_positives_caught}</td><td class="r num">${pct(x.precision)}</td><td class="r num">${pct(x.recall)}</td></tr>`).join("")}</tbody></table></div>
-      </div>
-      <div><h2>What the model pays most attention to</h2>
-        <p class="muted" style="margin-top:-6px">Share of the model's total split gain, with each category's one-hot columns added back together.</p>
-        <div id="imp-chart"></div></div>
-    </div>
-
-    <section class="section">
-      <h2>How an account score is built</h2>
-      <p class="lede" style="margin-bottom:12px">The model scores transfers; analysts work accounts. Each account starts at 1 and gains points from named reasons, capped at 10. Seven or more is critical; four to six is watch.</p>
-      <div class="table-wrap"><table>
-        <thead><tr><th>Reason</th><th>Comes from</th><th>When it fires</th><th class="r">Points</th></tr></thead>
-        <tbody>
-          <tr><td>Model alert</td><td>Model</td><td>A transfer scores at or above ${r.threshold.toFixed(3)}</td><td class="r">4 for 1 alert, 5 for 2–3, 6 for 4+</td></tr>
-          <tr><td>High model score</td><td>Model</td><td>No alert, but a transfer scores 0.75 or more</td><td class="r">2, or 3 if 3+ transfers</td></tr>
-          <tr><td>Raised model score</td><td>Model</td><td>Best transfer scores 0.50 to 0.75</td><td class="r">1</td></tr>
-          <tr><td>Rapid pass-through</td><td>Behaviour check</td><td>S$5,000+ received and 80%+ sent out within 24 hours</td><td class="r">2</td></tr>
-          <tr><td>Activity far above declared profile</td><td>Behaviour check</td><td>Money moved is 2× (or 4×) the declared monthly volume</td><td class="r">1 or 2</td></tr>
-          <tr><td>Fan-in, then out</td><td>Behaviour check</td><td>4+ senders, S$20,000+ in, 80%+ sent out</td><td class="r">1</td></tr>
-          <tr><td>Overseas or crypto transfers not declared</td><td>Behaviour check</td><td>Cross-currency or Bitcoin transfer out, but no overseas activity declared</td><td class="r">1</td></tr>
-          <tr><td>New account, high value</td><td>Behaviour check</td><td>Opened under 180 days ago and moved S$20,000+</td><td class="r">1</td></tr>
-          <tr><td>Transacted with a high-risk account</td><td>Network</td><td>A counterparty scores 7+ on its own reasons</td><td class="r">3</td></tr>
-        </tbody></table></div>
-      <p class="faint" style="font-size:12.5px">Why corroboration: one model alert is about ${per100(v.precision)}% precise, so on its own it gives a watch-level 5. An account turns critical when the model is backed by behaviour or repeated alerts.</p>
-    </section>
-
-    ${truth?.has_labels ? `<section class="section">
-      <h2>Check this batch against the truth</h2>
-      <p class="lede" style="margin-bottom:10px">This batch carries laundering labels, so the account scores can be checked directly.</p>
-      <label class="field" style="max-width:520px"><span>Flag accounts scoring at least <b id="cut-lab">7</b></span>
-        <input type="range" id="cut" min="1" max="10" value="7"></label>
-      <p class="metric-line" id="cut-out" style="margin-top:12px"></p>
-    </section>` : ""}`;
-
-  lineChart($("#thr-chart"), rep.threshold_table.filter((x) => x.alerts > 0));
-  hbar($("#imp-chart"), rep.importance.slice(0, 10));
-  if (truth?.has_labels) {
-    const show = () => {
-      const c = truth.cuts[Number($("#cut").value) - 1];
-      $("#cut-lab").textContent = c.cut;
-      $("#cut-out").innerHTML = `At ${c.cut} and above, the batch flags <b>${c.flagged}</b> accounts. <b>${c.tp}</b> of the ${truth.laundering_accounts} laundering accounts are among them, with <b>${c.fp}</b> false alarm${c.fp === 1 ? "" : "s"}. Precision ${pct(c.precision, 0)}, recall ${pct(c.recall, 0)}, F1 ${c.f1.toFixed(2)}.`;
-    };
-    $("#cut").addEventListener("input", show);
-    show();
-  }
 }
 
 // ---------------------------------------------------------------------------
