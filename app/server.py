@@ -23,8 +23,9 @@ from pydantic import BaseModel
 from . import store
 from .accounts import (CRITICAL_AT, REASON_TITLES, STR_BUSINESS_DAYS, WATCH_AT, add_business_days,
                        account_transactions_csv, build_accounts, business_days_between, money_flow,
+                       money_network,
                        rules_vs_model, str_draft)
-from .scoring import (BatchError, REPORT_DIR, feature_importance, load_model, score_batch)
+from .scoring import BatchError, load_model, score_batch
 
 APP_DIR = Path(__file__).resolve().parent
 STATIC = APP_DIR / "static"
@@ -79,7 +80,7 @@ def get_batch(batch_id: str) -> dict:
 # Scoring a batch
 # ---------------------------------------------------------------------------
 def _score_and_store(tx_df: pd.DataFrame, cu_df: pd.DataFrame, name: str, source: str,
-                     description: str = "") -> dict:
+                     description: str = "", curated: bool = False) -> dict:
     try:
         tx, cu, has_labels, notes, threshold = score_batch(tx_df, cu_df)
     except BatchError as e:
@@ -90,6 +91,7 @@ def _score_and_store(tx_df: pd.DataFrame, cu_df: pd.DataFrame, name: str, source
     meta = {
         "name": name.strip() or f"Batch {now:%d %b %Y %H:%M}",
         "source": source,
+        "curated": curated,
         "description": description,
         "scored_at": now.isoformat(),
         "scored_at_label": f"{now:%d %b %Y, %H:%M} SGT",
@@ -131,7 +133,8 @@ def create_demo():
     info = json.loads((DEMO / "demo_info.json").read_text())
     tx = pd.read_csv(DEMO / "transactions.csv", low_memory=False)
     cu = pd.read_csv(DEMO / "customers.csv", low_memory=False)
-    return ok(_score_and_store(tx, cu, info["name"], info["source"], info.get("description", "")))
+    return ok(_score_and_store(tx, cu, info["name"], info["source"], info.get("description", ""),
+                              bool(info.get("curated"))))
 
 
 @app.get("/api/batches")
@@ -284,6 +287,12 @@ def decide(batch_id: str, key: str, body: Decision):
     return ok(store.save_decision(batch_id, key, entry).get(key))
 
 
+@app.get("/api/batches/{batch_id}/network")
+def network(batch_id: str, min_amount: float = 1000):
+    data = get_batch(batch_id)
+    return ok(money_network(data["tx"], data["accounts"], min_amount))
+
+
 @app.get("/api/batches/{batch_id}/graph")
 def graph(batch_id: str, center: str, hops: int = 2, min_amount: float = 1000):
     data = get_batch(batch_id)
@@ -296,42 +305,6 @@ def graph(batch_id: str, center: str, hops: int = 2, min_amount: float = 1000):
 def rules(batch_id: str, amount: float = 20000, count: int = 30):
     data = get_batch(batch_id)
     return ok(rules_vs_model(data["tx"], data["accounts"], data["meta"]["has_labels"], amount, count))
-
-
-@app.get("/api/batches/{batch_id}/truth")
-def truth(batch_id: str):
-    """Account scores against labels, for every cut-off 1-10."""
-    data = get_batch(batch_id)
-    if not data["meta"]["has_labels"]:
-        return ok({"has_labels": False})
-    accs = list(data["accounts"].values())
-    bad = sum(1 for a in accs if a["labelled_laundering"])
-    cuts = []
-    for cut in range(1, 11):
-        flagged = [a for a in accs if a["score"] >= cut]
-        tp = sum(1 for a in flagged if a["labelled_laundering"])
-        fp = len(flagged) - tp
-        prec = tp / len(flagged) if flagged else 0.0
-        rec = tp / bad if bad else 0.0
-        f1 = 2 * prec * rec / (prec + rec) if prec + rec else 0.0
-        cuts.append({"cut": cut, "flagged": len(flagged), "tp": tp, "fp": fp, "fn": bad - tp,
-                     "precision": prec, "recall": rec, "f1": f1})
-    return ok({"has_labels": True, "laundering_accounts": bad, "accounts": len(accs), "cuts": cuts})
-
-
-# ---------------------------------------------------------------------------
-# Model report
-# ---------------------------------------------------------------------------
-@app.get("/api/model")
-def model_report():
-    _, _, threshold, _, _, results = load_model()
-    table = pd.read_csv(REPORT_DIR / "threshold_analysis_validation.csv").to_dict("records")
-    return ok({
-        "results": results,
-        "threshold_table": table,
-        "importance": feature_importance(),
-        "threshold": threshold,
-    })
 
 
 @app.get("/")

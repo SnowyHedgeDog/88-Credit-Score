@@ -378,6 +378,46 @@ def rules_vs_model(tx: pd.DataFrame, accounts: dict, has_labels: bool,
 # ---------------------------------------------------------------------------
 # Money flow graph
 # ---------------------------------------------------------------------------
+def _graph_payload(view: pd.DataFrame, accounts: dict, center: str | None, extra=()):
+    node_keys = set(view["sender_account_key"]) | set(view["receiver_account_key"]) | set(extra)
+    nodes = []
+    for k in node_keys:
+        a = accounts.get(k)
+        if a:
+            nodes.append({"id": k, "label": a["name"] if a.get("named") else k, "kind": a["status"],
+                          "score": a["score"], "type": a["type"], "center": k == center})
+        else:
+            nodes.append({"id": k, "label": k, "kind": "external", "score": None, "type": "External",
+                          "center": False})
+    links = [{
+        "source": r.sender_account_key, "target": r.receiver_account_key, "total": float(r.total),
+        "n": int(r.n), "flagged": int(r.flagged), "max_score": float(r.max_score),
+        "first": f"{r.first:%d %b %H:%M}", "last": f"{r.last:%d %b %H:%M}",
+    } for r in view.itertuples()]
+    return {"nodes": nodes, "links": links}
+
+
+def _edge_table(tx: pd.DataFrame) -> pd.DataFrame:
+    return (tx.groupby(["sender_account_key", "receiver_account_key"])
+              .agg(total=("amount_sgd", "sum"), n=("txn_id", "size"),
+                   flagged=("score", lambda s: int((s >= 0.75).sum())),
+                   max_score=("score", "max"),
+                   first=("txn_timestamp", "min"), last=("txn_timestamp", "max"))
+              .reset_index())
+
+
+def money_network(tx: pd.DataFrame, accounts: dict, min_amount: float, limit: int = 150):
+    """Every flow that touches a critical account, or runs between two watch-or-higher accounts."""
+    score = {k: a["score"] for k, a in accounts.items()}
+    edges = _edge_table(tx)
+    edges = edges[(edges["total"] >= min_amount) & (edges["sender_account_key"] != edges["receiver_account_key"])]
+    s = edges["sender_account_key"].map(score).fillna(0)
+    r = edges["receiver_account_key"].map(score).fillna(0)
+    view = edges[(s >= CRITICAL_AT) | (r >= CRITICAL_AT) | ((s >= WATCH_AT) & (r >= WATCH_AT))]
+    view = view.sort_values(["flagged", "total"], ascending=False).head(limit)
+    return _graph_payload(view, accounts, None)
+
+
 def money_flow(tx: pd.DataFrame, accounts: dict, center: str, hops: int, min_amount: float):
     edges = (tx.groupby(["sender_account_key", "receiver_account_key"])
                .agg(total=("amount_sgd", "sum"), n=("txn_id", "size"),
