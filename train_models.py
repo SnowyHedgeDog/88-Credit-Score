@@ -1,5 +1,4 @@
 from pathlib import Path
-import json
 
 import joblib
 import numpy as np
@@ -25,7 +24,6 @@ from xgboost import XGBClassifier
 ROOT = Path(__file__).resolve().parent
 FEATURE_DIR = ROOT / "cleaned" / "cleaned" / "features"
 MODEL_DIR = ROOT / "models"
-REPORT_DIR = ROOT / "reports"
 
 TARGET = "is_laundering"
 
@@ -201,7 +199,6 @@ def calculate_metrics(y_true, scores, threshold):
 
 def main():
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
-    REPORT_DIR.mkdir(parents=True, exist_ok=True)
 
     # Load training data and fit preprocessing on training data only.
     X_train_raw, y_train = load_split("train")
@@ -289,56 +286,9 @@ def main():
 
         del X, y
 
-    report = {
-        "model": "xgboost",
-        "evaluation_design": {
-            "train": "2022-09-01 through 2022-09-06",
-            "validation": "2022-09-07 through 2022-09-08",
-            "primary_test": "2022-09-09 through 2022-09-10",
-            "stress_test": "2022-09-11 through 2022-09-18",
-            "reason": (
-                "The Sep 11-18 period has a sharply different label rate "
-                "and much lower transaction volume, so it is reported "
-                "separately as a stress test."
-            ),
-        },
-        "training": {
-            "train_rows": int(train_rows),
-            "positive_labels_in_train": int(train_positives),
-            "xgboost_scale_pos_weight": float(scale_pos_weight),
-            "n_estimators": 150,
-            "max_depth": 6,
-            "learning_rate": 0.1,
-        },
-        "threshold_method": (
-            "Choose the threshold that maximizes F1 on validation data. "
-            "Apply that fixed threshold to the primary test and stress test "
-            "without retuning."
-        ),
-        "threshold": float(threshold),
-        "validation_metrics": validation_metrics,
-        "test_metrics": evaluation_results["test"],
-        "stress_test_metrics": evaluation_results["stress_test"],
-        "notes": [
-            "XGBoost is the only model trained and reported in this run.",
-            "Preprocessing is fitted on training data only.",
-            "Validation selects the threshold; neither test period selects it.",
-            "Sep 11-18 is a stress test, not a representative ordinary test.",
-            "The unusual label pattern is observed in the dataset; its cause "
-            "has not been established.",
-            "Model scores are not verified calibrated probabilities.",
-        ],
-    }
-
     # Overwrite the XGBoost model, preprocessor, and current results report.
     joblib.dump(model, MODEL_DIR / "xgboost.joblib")
     joblib.dump(preprocessor, MODEL_DIR / "preprocessor.joblib")
-
-    results_path = REPORT_DIR / "model_results.json"
-    results_path.write_text(
-        json.dumps(report, indent=2),
-        encoding="utf-8",
-    )
 
     # Remove the old Logistic Regression model so the product/repo has
     # only the XGBoost model artifact.
@@ -347,7 +297,6 @@ def main():
         logistic_path.unlink()
 
     print(f"\nXGBoost model saved in: {MODEL_DIR}")
-    print(f"Results overwritten at: {results_path}")
     if logistic_path.exists():
         print("Old logistic model file still exists.")
     else:
