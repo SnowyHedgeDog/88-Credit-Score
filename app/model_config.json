@@ -1,0 +1,7 @@
+{
+  "_note": "Alert threshold and validation precision from the team's XGBoost training run (train_models.py). Update if the model is retrained.",
+  "threshold": 0.9667461514472961,
+  "validation_metrics": {
+    "precision": 0.102803738317757
+  }
+}

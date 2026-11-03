@@ -41,7 +41,7 @@ No internet connection or API keys are needed.
 | Batches | Upload transactions and customer CSVs, or load the sample batch. Compares RemitSentry with simple threshold rules. |
 | Alert queue | All accounts ranked by risk score, with filters. |
 | Account | Score breakdown, customer profile, transactions, decision log, and a draft STR laid out like the STRO form. |
-| Money flow | Where money came from and went, up to two steps away, or a map of all high-risk accounts at once. |
+| Money flow | Where money came from and went, up to two steps away. |
 
 ## Account scoring
 
@@ -74,7 +74,7 @@ The app scores every transaction and account automatically. Laundering labels (`
 
 ## About laundering labels
 
-The model's own test results (precision, recall and more) are saved in `reports/model_results.json` from our team's training run on the full test set.
+`train_models.py` prints the model's precision, recall and alert threshold on the validation and test sets when it runs. The app keeps the alert threshold in `app/model_config.json`.
 
 We can only measure accuracy because our test data includes the true answer (`is_laundering`) for every transaction. A real firm's daily data won't have this. So:
 
@@ -90,7 +90,7 @@ It was made in two steps, for the presentation only:
 1. **Sampled:** 300 laundering accounts and 1,200 clean accounts from the full test set, with every transfer they made.
 2. **Curated:** laundering accounts that RemitSentry did not flag as critical were then removed, so the demo can show the workflow on cases the app catches.
 
-Because of step 2, the "caught" and "false alarms" figures on the Batches page are **illustrative, not a measure of accuracy**. The model's real test results are in `reports/model_results.json`.
+Because of step 2, the "caught" and "false alarms" figures on the Batches page are **illustrative, not a measure of accuracy**. Run `train_models.py` to see the model's results on the full test set.
 
 To rebuild it from the full dataset in `cleaned/cleaned/`:
 
@@ -126,8 +126,9 @@ python inspect_data.py
 python split_data.py
 python prepare_features.py
 python train_models.py
-python threshold_analysis.py
 ```
+
+If the new threshold `train_models.py` prints is different, update it in `app/model_config.json`.
 
 ## Folder structure
 
@@ -137,6 +138,7 @@ python threshold_analysis.py
 │   ├── server.py               Starts the app and handles requests from the browser
 │   ├── scoring.py              Runs the trained model on every transaction
 │   ├── accounts.py             Account scoring rules, money flow, rule comparison and draft STR
+│   ├── model_config.json       The model's alert threshold, from training
 │   ├── store.py                Saves scored batches to app/data/ (created when the app runs, not uploaded)
 │   ├── demo/                   Sample batch loaded on first start
 │   │   ├── transactions.csv    6,158 transactions from the test days
@@ -154,14 +156,11 @@ python threshold_analysis.py
 │   ├── xgboost.joblib          The trained model
 │   └── preprocessor.joblib     Prepares the model's inputs
 ├── reports/
-│   ├── model_results.json                 Model performance on validation and test data
-│   ├── threshold_analysis_validation.csv  Alerts, precision and recall at different thresholds
-│   └── data_inspection_report.txt         Data quality checks
+│   └── data_inspection_report.txt   Data quality checks
 ├── inspect_data.py             Step 1 of training: check the data
 ├── split_data.py               Step 2: split by date into train, validation and test
 ├── prepare_features.py         Step 3: build model inputs (also used by the app)
 ├── train_models.py             Step 4: train the model and pick its alert threshold
-├── threshold_analysis.py       Step 5: compare thresholds
 ├── sort_date.py                Helper: counts transactions and laundering per day
 ├── requirements.txt            Python packages needed
 └── README.md

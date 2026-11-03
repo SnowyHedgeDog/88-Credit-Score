@@ -33,6 +33,7 @@ import prepare_features  # noqa: E402  (team's feature code)
 from train_models import CATEGORICAL_FEATURES, FEATURES, NUMERIC_FEATURES  # noqa: E402
 
 MODEL_DIR = REPO_ROOT / "models"
+APP_CONFIG = Path(__file__).resolve().parent / "model_config.json"
 REPORT_DIR = REPO_ROOT / "reports"
 
 TXN_REQUIRED = [
@@ -90,7 +91,11 @@ def load_model():
         warnings.simplefilter("ignore")
         preprocessor = joblib.load(MODEL_DIR / "preprocessor.joblib")
         model = joblib.load(MODEL_DIR / "xgboost.joblib")
-    results = json.loads((REPORT_DIR / "model_results.json").read_text())
+    # The alert threshold comes from the team's training run. Use the saved
+    # report when it exists, otherwise the copy kept with the app.
+    report = REPORT_DIR / "model_results.json"
+    source = report if report.exists() else APP_CONFIG
+    results = json.loads(source.read_text())
     threshold = float(results["threshold"])
 
     # Map every transformed column back to the input column it came from,
