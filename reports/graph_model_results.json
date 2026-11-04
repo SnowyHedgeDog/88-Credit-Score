@@ -1,0 +1,113 @@
+{
+  "model": "xgboost",
+  "model_id": "graph-6e53374ffd324496",
+  "trained_at": "2026-11-04T17:06:58.293874+00:00",
+  "feature_fingerprint": "328b2f0f0fb9fe1ff46ac8e9884848d5f6ca4244eb80084bf5c6f836c7d74409",
+  "feature_schema_version": "transaction-graph-v1",
+  "smoke_test": false,
+  "training": {
+    "train_rows": 3248919,
+    "positive_labels_in_train": 2530,
+    "xgboost_scale_pos_weight": 5.0,
+    "n_estimators": 150,
+    "max_depth": 6,
+    "learning_rate": 0.1,
+    "max_rows_per_split": null,
+    "n_jobs": 12,
+    "batch_size": 50000,
+    "timings_seconds": {
+      "training_cache_seconds": 59.419875006999064,
+      "preprocessor_fit_seconds": 38.34257497100043,
+      "training_matrix_seconds": 30.814266566998413,
+      "xgboost_fit_seconds": 121.59568549300093,
+      "validation_evaluation_seconds": 27.698465613000735,
+      "test_evaluation_seconds": 23.620679690000543,
+      "stress_test_evaluation_seconds": 0.20834876300068572
+    }
+  },
+  "threshold_method": "Maximum validation F1; fixed unchanged for test and stress test.",
+  "threshold": 0.40149083733558655,
+  "validation_metrics": {
+    "threshold": 0.40149083733558655,
+    "rows": 965521,
+    "precision": 0.5086551264980027,
+    "recall": 0.3687258687258687,
+    "f1": 0.42753217683219324,
+    "average_precision_pr_auc": 0.38363295818814036,
+    "roc_auc": 0.9804241848076123,
+    "accuracy": 0.9989404684103194,
+    "confusion_matrix": [
+      [
+        964116,
+        369
+      ],
+      [
+        654,
+        382
+      ]
+    ],
+    "alerts": 751,
+    "actual_laundering": 1036,
+    "false_alerts": 369,
+    "missed_laundering_cases": 654
+  },
+  "test_metrics": {
+    "threshold": 0.40149083733558655,
+    "rows": 862788,
+    "precision": 0.3876464323748669,
+    "recall": 0.3807531380753138,
+    "f1": 0.38416886543485623,
+    "average_precision_pr_auc": 0.35243923732863675,
+    "roc_auc": 0.9757235854556555,
+    "accuracy": 0.9986474081697937,
+    "confusion_matrix": [
+      [
+        861257,
+        575
+      ],
+      [
+        592,
+        364
+      ]
+    ],
+    "alerts": 939,
+    "actual_laundering": 956,
+    "false_alerts": 575,
+    "missed_laundering_cases": 592
+  },
+  "stress_test_metrics": {
+    "threshold": 0.40149083733558655,
+    "rows": 1108,
+    "precision": 0.9902200488997555,
+    "recall": 0.6183206106870229,
+    "f1": 0.7612781954882485,
+    "average_precision_pr_auc": 0.9822543821162385,
+    "roc_auc": 0.9787203208466037,
+    "accuracy": 0.7707581227436823,
+    "confusion_matrix": [
+      [
+        449,
+        4
+      ],
+      [
+        250,
+        405
+      ]
+    ],
+    "alerts": 409,
+    "actual_laundering": 655,
+    "false_alerts": 4,
+    "missed_laundering_cases": 250
+  },
+  "versions": {
+    "xgboost": "3.4.1",
+    "scikit_learn": "1.8.0",
+    "pyarrow": "26.0.1"
+  },
+  "notes": [
+    "Customer profiles are excluded from model inputs.",
+    "Graph history and scoring batches are defined by the feature manifest.",
+    "Class weight is explicit and must be tuned on validation data.",
+    "Scores are not verified calibrated probabilities."
+  ]
+}

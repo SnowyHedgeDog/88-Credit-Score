@@ -6,6 +6,7 @@ Run from the repo root:
 from __future__ import annotations
 
 import io
+import hashlib
 import json
 import math
 from collections import Counter
@@ -30,6 +31,8 @@ APP_DIR = Path(__file__).resolve().parent
 STATIC = APP_DIR / "static"
 DEMO = APP_DIR / "demo"
 SGT = ZoneInfo("Asia/Singapore")
+CSV_ID_TYPES = {column: "string" for column in
+                ("txn_id", "account_key", "sender_account_key", "receiver_account_key")}
 
 app = FastAPI(title="RemitSentry")
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
@@ -79,9 +82,12 @@ def get_batch(batch_id: str) -> dict:
 # Scoring a batch
 # ---------------------------------------------------------------------------
 def _score_and_store(tx_df: pd.DataFrame, cu_df: pd.DataFrame, name: str, source: str,
-                     description: str = "", curated: bool = False) -> dict:
+                     description: str = "", curated: bool = False,
+                     history_namespace: str = "uploads") -> dict:
     try:
-        tx, cu, has_labels, notes, threshold = score_batch(tx_df, cu_df)
+        tx, cu, has_labels, notes, threshold = score_batch(
+            tx_df, cu_df, history_namespace=history_namespace,
+        )
     except BatchError as e:
         raise HTTPException(422, str(e))
     accounts = build_accounts(tx, cu, threshold, has_labels)
@@ -103,6 +109,7 @@ def _score_and_store(tx_df: pd.DataFrame, cu_df: pd.DataFrame, name: str, source
         "has_labels": has_labels,
         "notes": notes,
         "threshold": threshold,
+        **tx.attrs.get("scoring_metadata", {}),
     }
     meta["id"] = None
     batch_id = store.save(clean(meta), tx, cu, accounts)
@@ -114,7 +121,7 @@ def _read_csv(upload: UploadFile, label: str) -> pd.DataFrame:
     if not raw:
         raise HTTPException(422, f"The {label} file is empty.")
     try:
-        return pd.read_csv(io.BytesIO(raw), low_memory=False)
+        return pd.read_csv(io.BytesIO(raw), dtype=CSV_ID_TYPES, low_memory=False)
     except Exception as e:  # noqa: BLE001
         raise HTTPException(422, f"Could not read the {label} file as CSV: {e}")
 
@@ -130,10 +137,13 @@ def create_batch(transactions: UploadFile = File(...), customers: UploadFile = F
 @app.post("/api/batches/demo")
 def create_demo():
     info = json.loads((DEMO / "demo_info.json").read_text())
-    tx = pd.read_csv(DEMO / "transactions.csv", low_memory=False)
-    cu = pd.read_csv(DEMO / "customers.csv", low_memory=False)
+    # Demo exports reuse display IDs; rebuilding the file starts an isolated
+    # history instead of conflicting with a previous demo's transactions.
+    namespace = "demo:" + hashlib.sha256((DEMO / "transactions.csv").read_bytes()).hexdigest()[:16]
+    tx = pd.read_csv(DEMO / "transactions.csv", dtype=CSV_ID_TYPES, low_memory=False)
+    cu = pd.read_csv(DEMO / "customers.csv", dtype=CSV_ID_TYPES, low_memory=False)
     return ok(_score_and_store(tx, cu, info["name"], info["source"], info.get("description", ""),
-                              bool(info.get("curated"))))
+                              bool(info.get("curated")), history_namespace=namespace))
 
 
 @app.get("/api/batches")

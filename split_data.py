@@ -51,6 +51,11 @@ def main():
         pd.read_csv(
             INPUT_FILE,
             chunksize=CHUNK_SIZE,
+            dtype={
+                "txn_id": "string",
+                "sender_account_key": "string",
+                "receiver_account_key": "string",
+            },
             low_memory=False,
         ),
         start=1,
