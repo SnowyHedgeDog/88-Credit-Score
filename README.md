@@ -130,6 +130,21 @@ python train_models.py
 
 If the new threshold `train_models.py` prints is different, update it in `app/model_config.json`.
 
+After changing feature preparation, regenerate the feature CSVs and retrain both
+the model and preprocessor using the steps above. Score existing saved batches
+again to apply the retrained model.
+
+## Feature regression checks
+
+Run these checks from the repository folder:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+They verify the time and account-age inputs, preserve transaction/profile/label
+alignment, and check that CSV chunk size and row indexes do not change features.
+
 ## Folder structure
 
 ```

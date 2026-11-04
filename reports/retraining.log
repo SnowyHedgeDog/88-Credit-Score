@@ -1,0 +1,43 @@
+Loading train data...
+  Rows: 3,248,919
+  Laundering labels: 2,530
+
+Fitting preprocessing on training data only...
+Loading validation data...
+  Rows: 965,521
+  Laundering labels: 1,036
+Transforming validation data...
+
+Training XGBoost from scratch...
+
+Validation results:
+  PR-AUC: 0.07013
+  Precision: 0.10420
+  Recall: 0.17471
+  F1: 0.13054
+  Validation-selected threshold: 0.96116304
+Loading test data...
+  Rows: 862,788
+  Laundering labels: 956
+Transforming test data...
+
+test results:
+  PR-AUC: 0.06438
+  Precision: 0.08906
+  Recall: 0.20607
+  F1: 0.12437
+  Alerts: 2,212
+Loading stress_test data...
+  Rows: 1,108
+  Laundering labels: 655
+Transforming stress_test data...
+
+stress_test results:
+  PR-AUC: 0.89037
+  Precision: 0.93310
+  Recall: 0.40458
+  F1: 0.56443
+  Alerts: 284
+
+XGBoost model saved in: /Users/junyangquek/Desktop/IS4228/88-Credit-Score/models
+Old logistic model file removed, if it was present.

@@ -76,6 +76,10 @@ def add_customer_profile_features(chunk, customer_lookup, role):
 
 
 def prepare_chunk(chunk, customer_lookup):
+    # CSV chunks retain their original row indexes; profile joins reset them.
+    # Align all rows before extracting Series used to calculate features.
+    chunk = chunk.reset_index(drop=True)
+
     metadata = chunk[
         ["txn_timestamp", "sender_account_key", "receiver_account_key"]
     ].copy()

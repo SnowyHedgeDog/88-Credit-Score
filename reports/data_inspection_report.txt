@@ -1,6 +1,6 @@
 FULL CSV DATA INSPECTION
-Generated: 2026-10-29T02:18:45+08:00
-Data directory: C:\Users\darre\OneDrive\Documents\NUS SEM 5\IS4228\Project\cleaned\cleaned
+Generated: 2026-11-04T20:09:24+08:00
+Data directory: /Users/junyangquek/Desktop/IS4228/88-Credit-Score/cleaned/cleaned
 Every CSV row was scanned in chunks. No raw records are included.
 
 ==============================================================================
@@ -13,24 +13,24 @@ Columns (14): customer_id, account_key, bank_id, account_id, customer_type, occu
 COLUMN SUMMARIES
 - customer_id: type=int64; missing=0 (0.00%)
     numeric: min=1.0, max=515088.0, mean=257544
-- account_key: type=object; missing=0 (0.00%)
+- account_key: type=str; missing=0 (0.00%)
 - bank_id: type=int64; missing=0 (0.00%)
     numeric: min=1.0, max=356303.0, mean=103319
-- account_id: type=object; missing=0 (0.00%)
-- customer_type: type=object; missing=0 (0.00%)
-- occupation_or_industry: type=object; missing=0 (0.00%)
-- employment_status: type=object; missing=76,912 (14.93%)
+- account_id: type=str; missing=0 (0.00%)
+- customer_type: type=str; missing=0 (0.00%)
+- occupation_or_industry: type=str; missing=0 (0.00%)
+- employment_status: type=str; missing=76,912 (14.93%)
 - monthly_income_sgd: type=float64; missing=0 (0.00%)
     numeric: min=204.69, max=6773508.7, mean=23242
-- account_open_channel: type=object; missing=0 (0.00%)
+- account_open_channel: type=str; missing=0 (0.00%)
 - expected_monthly_amount_sgd: type=float64; missing=0 (0.00%)
     numeric: min=91.44, max=7337893.0, mean=22188.2
 - expected_monthly_txn_count: type=int64; missing=0 (0.00%)
     numeric: min=10.0, max=500.0, mean=87.7054
 - expects_international_activity: type=int64; missing=0 (0.00%)
     numeric: min=0.0, max=1.0, mean=0.245387
-- account_open_date: type=object; missing=0 (0.00%)
-- risk_band: type=object; missing=0 (0.00%)
+- account_open_date: type=str; missing=0 (0.00%)
+- risk_band: type=str; missing=0 (0.00%)
 
 ==============================================================================
 fx_rates.csv
@@ -40,11 +40,11 @@ Total rows: 15
 Columns (3): currency, usd_per_unit, sgd_per_unit
 
 COLUMN SUMMARIES
-- currency: type=object; missing=0 (0.00%)
+- currency: type=str; missing=0 (0.00%)
 - usd_per_unit: type=float64; missing=0 (0.00%)
-    numeric: min=0.0094876660331121, max=11874.999999999998, mean=792.133
+    numeric: min=0.009487666033112178, max=11874.999999999998, mean=792.133
 - sgd_per_unit: type=float64; missing=0 (0.00%)
-    numeric: min=0.0129032258050325, max=16149.999999999998, mean=1077.3
+    numeric: min=0.012903225805032564, max=16149.999999999998, mean=1077.3
 
 ==============================================================================
 transactions.csv
@@ -54,26 +54,26 @@ Total rows: 5,078,336
 Columns (15): txn_timestamp, sender_account_key, sender_bank_id, sender_account_id, receiver_account_key, receiver_bank_id, receiver_account_id, amount_sent, currency_sent, amount_received, currency_received, amount_usd, amount_sgd, payment_method, is_laundering
 
 COLUMN SUMMARIES
-- txn_timestamp: type=object; missing=0 (0.00%)
-- sender_account_key: type=object; missing=0 (0.00%)
+- txn_timestamp: type=str; missing=0 (0.00%)
+- sender_account_key: type=str; missing=0 (0.00%)
 - sender_bank_id: type=int64; missing=0 (0.00%)
     numeric: min=1.0, max=356303.0, mean=45730.6
-- sender_account_id: type=object; missing=0 (0.00%)
-- receiver_account_key: type=object; missing=0 (0.00%)
+- sender_account_id: type=str; missing=0 (0.00%)
+- receiver_account_key: type=str; missing=0 (0.00%)
 - receiver_bank_id: type=int64; missing=0 (0.00%)
     numeric: min=1.0, max=356294.0, mean=65744.6
-- receiver_account_id: type=object; missing=0 (0.00%)
+- receiver_account_id: type=str; missing=0 (0.00%)
 - amount_sent: type=float64; missing=0 (0.00%)
     numeric: min=1e-06, max=1046302363293.48, mean=4.50928e+06
-- currency_sent: type=object; missing=0 (0.00%)
+- currency_sent: type=str; missing=0 (0.00%)
 - amount_received: type=float64; missing=0 (0.00%)
     numeric: min=1e-06, max=1046302363293.48, mean=5.98874e+06
-- currency_received: type=object; missing=0 (0.00%)
+- currency_received: type=str; missing=0 (0.00%)
 - amount_usd: type=float64; missing=0 (0.00%)
     numeric: min=0.0, max=26558612904.53, mean=350945
 - amount_sgd: type=float64; missing=0 (0.00%)
     numeric: min=0.0, max=36119713550.16, mean=477285
-- payment_method: type=object; missing=0 (0.00%)
+- payment_method: type=str; missing=0 (0.00%)
 - is_laundering: type=int64; missing=0 (0.00%)
     numeric: min=0.0, max=1.0, mean=0.00101943
 
