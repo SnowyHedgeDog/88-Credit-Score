@@ -25,7 +25,7 @@ from . import store
 from .accounts import (CRITICAL_AT, REASON_TITLES, STR_BUSINESS_DAYS, WATCH_AT, add_business_days,
                        account_transactions_csv, build_accounts, business_days_between, money_flow,
                        rules_vs_model, str_draft)
-from .scoring import BatchError, load_model, score_batch
+from .scoring import BatchError, apply_saved_scores, load_model, score_batch
 
 APP_DIR = Path(__file__).resolve().parent
 STATIC = APP_DIR / "static"
@@ -82,12 +82,15 @@ def get_batch(batch_id: str) -> dict:
 # Scoring a batch
 # ---------------------------------------------------------------------------
 def _score_and_store(tx_df: pd.DataFrame, cu_df: pd.DataFrame, name: str, source: str,
-                     description: str = "", curated: bool = False,
-                     history_namespace: str = "uploads") -> dict:
+                     description: str = "",
+                     history_namespace: str = "uploads", saved_scores: dict | None = None) -> dict:
     try:
-        tx, cu, has_labels, notes, threshold = score_batch(
-            tx_df, cu_df, history_namespace=history_namespace,
-        )
+        if saved_scores is not None:
+            tx, cu, has_labels, notes, threshold = apply_saved_scores(tx_df, cu_df, saved_scores)
+        else:
+            tx, cu, has_labels, notes, threshold = score_batch(
+                tx_df, cu_df, history_namespace=history_namespace,
+            )
     except BatchError as e:
         raise HTTPException(422, str(e))
     accounts = build_accounts(tx, cu, threshold, has_labels)
@@ -96,7 +99,6 @@ def _score_and_store(tx_df: pd.DataFrame, cu_df: pd.DataFrame, name: str, source
     meta = {
         "name": name.strip() or f"Batch {now:%d %b %Y %H:%M}",
         "source": source,
-        "curated": curated,
         "description": description,
         "scored_at": now.isoformat(),
         "scored_at_label": f"{now:%d %b %Y, %H:%M} SGT",
@@ -142,8 +144,23 @@ def create_demo():
     namespace = "demo:" + hashlib.sha256((DEMO / "transactions.csv").read_bytes()).hexdigest()[:16]
     tx = pd.read_csv(DEMO / "transactions.csv", dtype=CSV_ID_TYPES, low_memory=False)
     cu = pd.read_csv(DEMO / "customers.csv", dtype=CSV_ID_TYPES, low_memory=False)
+    # The sample batch ships with its graph-model scores, so it shows graph-model
+    # results on every computer. Uploaded batches are always scored live.
+    saved = DEMO / "graph_scores.json"
+    saved_scores = json.loads(saved.read_text()) if saved.exists() else None
     return ok(_score_and_store(tx, cu, info["name"], info["source"], info.get("description", ""),
-                              bool(info.get("curated")), history_namespace=namespace))
+                              history_namespace=namespace, saved_scores=saved_scores))
+
+
+@app.get("/api/model")
+def model_status():
+    """Which model new batches are scored with on this computer."""
+    try:
+        results = load_model()[-1]
+    except BatchError as e:
+        raise HTTPException(500, str(e))
+    return ok({"feature_mode": results.get("feature_mode"), "model_id": results.get("model_id"),
+               "fallback_reason": results.get("fallback_reason")})
 
 
 @app.get("/api/batches")
@@ -324,7 +341,9 @@ def main():
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--no-browser", action="store_true")
     args = parser.parse_args()
-    load_model()  # fail fast if model files are missing
+    results = load_model()[-1]  # fail fast if model files are missing
+    if results.get("fallback_reason"):
+        print("Note: " + results["fallback_reason"], flush=True)
     store.refresh_all()  # rebuild batches saved by an older version
     if not store.list_batches():
         create_demo()  # never open on an empty app

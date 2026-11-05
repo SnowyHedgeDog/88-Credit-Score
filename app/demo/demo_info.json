@@ -1,6 +1,5 @@
 {
   "name": "Test days, 9\u201310 Sep 2022",
   "source": "real",
-  "description": "Transactions from our held-out test days, which the model never trained on.",
-  "curated": true
+  "description": "Transactions from our held-out test days, which the model never trained on."
 }

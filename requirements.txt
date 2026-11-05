@@ -6,7 +6,9 @@ numpy>=1.26
 scikit-learn==1.8.0   # must match the version that saved models/*.joblib
 xgboost>=2.0
 joblib>=1.3
-snapml==1.17.2        # graph-feature schema records this exact backend version
+# Graph model backend. IBM only publishes snapml for x86-64 Linux/macOS on
+# Python 3.9-3.12; elsewhere pip skips it and the app uses the baseline model.
+snapml==1.17.2 ; python_version < "3.13" and platform_machine == "x86_64" and (sys_platform == "linux" or sys_platform == "darwin")
 
 # Analyst app (app/)
 fastapi>=0.110

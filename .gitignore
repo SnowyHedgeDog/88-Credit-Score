@@ -14,3 +14,9 @@ venv/
 
 # RemitSentry app: scored batches saved at runtime
 app/data/
+
+# Extra local Python environments
+.venv-*/
+
+# macOS folder metadata
+.DS_Store

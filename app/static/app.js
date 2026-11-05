@@ -157,6 +157,8 @@ const emptyState = () => `<div class="empty"><h2>No batch scored yet</h2>
 async function pageBatches() {
   const s = state.summary;
   const m = s?.meta;
+  if (state.model === undefined) state.model = await api("/api/model").catch(() => null);
+  const modelName = (meta) => meta.feature_mode === "graph" ? "graph model" : "baseline model";
   view.innerHTML = `
     <div class="page-head">
       <h1>Batches</h1>
@@ -165,18 +167,20 @@ async function pageBatches() {
     ${m ? `
       ${m.source === "synthetic" ? `<div class="note">You're viewing the synthetic sample batch. It uses the same file format as the team's data, with laundering patterns planted so the demo has known answers.</div>` : ""}
       ${m.source === "real" && m.description ? `<div class="note">${esc(m.description)}</div>` : ""}
+      ${m.model_fallback ? `<div class="note">This batch was scored with the <b>baseline model</b>. ${esc(m.model_fallback)}</div>` : ""}
       <div class="notice">
         <b>${esc(m.name)}</b> scored ${esc(m.scored_at_label)}.
         ${m.critical ? `${plural(m.critical, "account")} ${m.critical === 1 ? "is" : "are"} critical and waiting in the alert queue. File any confirmed STRs by ${dday(s.str_due)}.` : "No account is critical."}
         <div class="row" style="margin-top:10px">
           <a class="btn primary" href="#/queue">Open the alert queue</a>
-          <span class="muted">${plural(m.transactions, "transfer")} from ${dday(m.from)} to ${dday(m.to)}, ${plural(m.model_alerts, "model alert")} at threshold ${m.threshold.toFixed(3)}</span>
+          <span class="muted">${plural(m.transactions, "transfer")} from ${dday(m.from)} to ${dday(m.to)}, ${plural(m.model_alerts, "model alert")} at threshold ${m.threshold.toFixed(3)}, scored with the ${modelName(m)}</span>
         </div>
         ${m.notes?.length ? `<p class="muted" style="margin:8px 0 0">${m.notes.map(esc).join("<br>")}</p>` : ""}
       </div>
       <section class="section" id="versus"></section>` : ""}
     <section class="section">
       <h2>Score a new batch</h2>
+      ${state.model?.fallback_reason ? `<div class="note">New batches on this computer are scored with the <b>baseline model</b>. ${esc(state.model.fallback_reason)}</div>` : ""}
       <form id="upload" class="stack">
         <div class="grid-2">
           ${dropZone("transactions", "Transactions (CSV, required)", "txn_timestamp, sender_account_key, receiver_account_key, amount_sgd, currency_sent, currency_received, payment_method")}

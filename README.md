@@ -4,39 +4,225 @@ RemitSentry is an Anti-Money Laundering solution for small cross-border remittan
 
 **Category:** Consumer or B2B fintech application (money-laundering alert system).
 
+**Quick links:** [Getting started](#getting-started) · [The model](#the-model) · [Folder structure](#folder-structure)
+
 ## How it works
 
-1. XGBoost scores transactions using transfer details and features from recent money flows. Scores are ranking signals, not calibrated probabilities.
-2. The app gives every account a risk score from 1 to 10, using those transaction scores plus simple behaviour rules.
-3. Each account shows the reasons for its score, its transactions, a money-flow map and a draft suspicious transaction report (STR).
+1. **Transaction scoring.** An XGBoost model scores every transfer. Its main inputs are graph features describing recent money flows between accounts: how many accounts pay in and out (fan-in/fan-out), money moving in cycles, and scatter-gather patterns. Scores are ranking signals, not calibrated probabilities.
+2. **Account scoring.** Every customer account gets a risk score from 1 to 10, combining the transaction scores with simple behaviour rules (see [Account scoring](#account-scoring)).
+3. **Investigation.** Each account shows the reasons for its score, its transactions, a money-flow map and a draft suspicious transaction report (STR).
 
-## Setup
+## The model
 
-Requirements: Python 3.12 or newer. On a Mac, also run `brew install libomp` once (needed by XGBoost).
+RemitSentry's model is the **graph model**. The repo also includes a **baseline model**, so anyone who can't install the graph model's library can still run the app and try every page. Both use XGBoost; they differ in their inputs.
 
-If Homebrew's OpenMP runtime is missing but Conda already provides it,
-`python train_models.py` automatically uses that existing library through an
-isolated directory inside the Python environment and restarts once before
-loading native packages. It prints the selected path. This avoids exposing
-unrelated Conda libraries to NumPy. Other launchers still need OpenMP configured.
+| | **Graph model** (main) | **Baseline model** (for trying the app) |
+| --- | --- | --- |
+| Files | `models/graph/model_bundle.joblib` (model, preprocessing, threshold and feature manifest in one bundle) | `models/xgboost.joblib`, `models/preprocessor.joblib`, threshold in `app/model_config.json` |
+| Inputs | Transfer details + 270 graph features from IBM's snapml | Transfer details + customer profile (KYC) fields |
+| Uses customer profiles? | No | Yes |
+| Runs on | Linux (x86-64) or Intel Mac with Python 3.11–3.12, or the setups below | Every computer |
+
+**The preloaded sample batch is scored with the graph model on every computer.** Its graph-model scores are saved in `app/demo/graph_scores.json`, so you can see the graph model's results without installing snapml.
+
+**Batches you upload are scored live.** The app uses the graph model when snapml is installed (Linux or Intel Mac, or the setups in [Option 2](#option-2-full-graph-model-on-an-apple-silicon-mac-or-windows)). Otherwise it uses the baseline model and says so (see [Check which model is running](#check-which-model-is-running)).
+
+### Data and splits
+
+The data is a synthetic remittance dataset with a known laundering label (`is_laundering`) on every transaction. It is split **by date**, so the model is always tested on days it never saw:
+
+| Split | Dates (2022) | Used for |
+| --- | --- | --- |
+| Train | before 7 Sep | Fitting the model (3,248,919 transactions, 2,530 laundering) |
+| Validation | 7–8 Sep | Choosing the alert threshold |
+| Test | 9–10 Sep | Measuring performance on unseen days |
+| Stress test | from 11 Sep | A small, laundering-heavy check |
+
+### Features
+
+For every transfer, the graph model uses:
+
+- **Transfer details:** log SGD amount, currencies sent and received, payment method, hour, weekday, weekend.
+- **Supporting flags:** self-transfer, currency change, whether the sender and receiver were seen before.
+- **Graph patterns** (24-hour windows unless stated): fan-in, fan-out, degree-in and degree-out histograms; scatter-gather (6 hours); temporal cycles and simple cycles up to length 10.
+- **Account statistics** for the sender and receiver, incoming and outgoing: number of counterparties, transfer counts, and eight statistics each for amounts and timestamps.
+
+Account IDs and laundering labels are never model inputs. The graph is built in time order, so a transfer's features only use transfers up to that moment, never later ones. The full recipe is in [Graph feature recipe and history](#graph-feature-recipe-and-history).
+
+### Training
+
+`train_models.py` trains XGBoost with 150 trees, maximum depth 6, learning rate 0.1 and `scale_pos_weight` 5 (to give the rare laundering class more weight). The alert threshold (0.401) is the one that maximises F1 on the validation days. It is then kept fixed for the test and stress test.
+
+### Explanations
+
+For every transfer, the app shows the three features that pushed its score up the most (XGBoost feature contributions), in plain language. Account scores list every rule that added points.
+
+## Getting started
+
+Choose one of three setups:
+
+| I want to… | My computer | Setup | Time |
+| --- | --- | --- | --- |
+| **See the app and the graph model's results** on the preloaded sample batch | Any computer | [Option 3](#option-3-see-the-app-any-computer) | ~5 min |
+| **Score my own data** with the graph model | Linux (x86-64) or Intel Mac | [Option 1](#option-1-full-graph-model-on-linux-or-an-intel-mac) | ~5 min |
+| **Score my own data** with the graph model | Apple Silicon Mac (M1–M5) or Windows | [Option 2](#option-2-full-graph-model-on-an-apple-silicon-mac-or-windows) | ~15–30 min |
+
+**Why the difference?** The graph features come from IBM's **snapml** library, which IBM only publishes for x86-64 Linux and Intel Macs on Python 3.9–3.12 (and scikit-learn 1.8 needs Python 3.11+). It can't be installed directly on Windows, Apple Silicon Macs or Python 3.13+. Option 2 works around this. With Option 3, the sample batch still shows the graph model's results, and any data you upload is scored with the baseline model.
+
+If you don't have git, download the repo from GitHub with **Code → Download ZIP**, unzip it, and skip the `git clone` line.
+
+### Option 1: Full graph model on Linux or an Intel Mac
+
+**Linux (x86-64)**, with Python 3.11 or 3.12 (`python3.12 --version` to check):
 
 ```bash
 git clone https://github.com/SnowyHedgeDog/88-Credit-Score.git
 cd 88-Credit-Score
-python -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
 pip install -r requirements.txt
-```
-
-## Run
-
-```bash
+python -c "import snapml; print('snapml OK')"     # should print: snapml OK
 python -m app.server
 ```
 
-The app opens at http://localhost:8000. It loads a sample batch on first start (about 15 seconds). Press Ctrl + C to stop it.
+**Intel Mac.** snapml also needs an Intel copy of OpenMP at `/usr/local/opt/libomp/lib/libomp.dylib`. Homebrew no longer supports new installs on Intel Macs, so these steps get Python 3.12 and OpenMP from Miniforge (a standalone Python distribution that doesn't touch your existing Python):
 
-No internet connection or API keys are needed.
+```bash
+# 1. Python 3.12 + OpenMP
+curl -L -o ~/Miniforge-x86.sh https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-MacOSX-x86_64.sh
+bash ~/Miniforge-x86.sh -b -p ~/miniforge-x86
+~/miniforge-x86/bin/conda create -y -n remitsentry python=3.12 llvm-openmp
+
+# 2. Put OpenMP where snapml looks for it (asks for your Mac password)
+sudo mkdir -p /usr/local/opt/libomp/lib
+sudo cp ~/miniforge-x86/envs/remitsentry/lib/libomp.dylib /usr/local/opt/libomp/lib/
+
+# 3. Get the project and install its packages
+git clone https://github.com/SnowyHedgeDog/88-Credit-Score.git
+cd 88-Credit-Score
+source ~/miniforge-x86/bin/activate remitsentry
+pip install -r requirements.txt
+python -c "import snapml; print('snapml OK')"     # should print: snapml OK
+
+# 4. Run
+python -m app.server
+```
+
+If you already have Homebrew on your Intel Mac, you can replace step 2 with `brew install libomp`.
+
+The app opens at http://localhost:8000 and loads a sample batch on first start (about 15 seconds).
+
+### Option 2: Full graph model on an Apple Silicon Mac or Windows
+
+**Apple Silicon Mac (M1–M5).** The Mac runs an Intel copy of Python through **Rosetta**, Apple's built-in translator for Intel software. Setup takes about 15 minutes once. The first app start is slow (a few minutes) while Rosetta translates the libraries; later starts are quicker.
+
+```bash
+# 1. Turn on Rosetta
+softwareupdate --install-rosetta --agree-to-license
+
+# 2. Intel-only Python 3.12 + OpenMP from Miniforge (doesn't touch your normal Python)
+curl -L -o ~/Miniforge-x86.sh https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-MacOSX-x86_64.sh
+bash ~/Miniforge-x86.sh -b -p ~/miniforge-x86
+~/miniforge-x86/bin/conda create -y -n remitsentry python=3.12 llvm-openmp
+
+# 3. Put OpenMP where snapml looks for it (asks for your Mac password)
+sudo mkdir -p /usr/local/opt/libomp/lib
+sudo cp ~/miniforge-x86/envs/remitsentry/lib/libomp.dylib /usr/local/opt/libomp/lib/
+
+# 4. Get the project and install its packages
+git clone https://github.com/SnowyHedgeDog/88-Credit-Score.git
+cd 88-Credit-Score
+source ~/miniforge-x86/bin/activate remitsentry
+python -c "import platform; print(platform.machine())"   # must print: x86_64
+pip install -r requirements.txt
+python -c "import snapml; print('snapml OK')"            # should print: snapml OK
+
+# 5. Run
+python -m app.server
+```
+
+To use this Python in VS Code: **Cmd+Shift+P → Python: Select Interpreter → Enter interpreter path**, then paste `~/miniforge-x86/envs/remitsentry/bin/python`.
+
+**Windows** (Intel or AMD processor). Windows runs Ubuntu Linux inside **WSL2**, and the app runs there. This takes about 20–30 minutes once, needs administrator rights, and doesn't work on Windows laptops with ARM (Snapdragon) chips.
+
+1. Open **PowerShell as Administrator** and run:
+   ```powershell
+   wsl --install -d Ubuntu-24.04
+   ```
+2. Restart the computer. Open **Ubuntu 24.04** from the Start menu and create a username and password when asked.
+3. In the Ubuntu window, run:
+   ```bash
+   sudo apt update
+   sudo apt install -y git python3 python3-venv python3-pip libgomp1
+   python3 --version                 # should be 3.12
+
+   git clone https://github.com/SnowyHedgeDog/88-Credit-Score.git
+   cd 88-Credit-Score
+   python3 -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements.txt
+   python -c "import snapml; print('snapml OK')"     # should print: snapml OK
+
+   python -m app.server --no-browser
+   ```
+4. Open **http://localhost:8000** in your normal Windows browser.
+
+### Option 3: See the app (any computer)
+
+This runs the full app (alert queue, account scores, money flow, STR drafts) on any computer. The preloaded sample batch opens automatically and shows the **graph model's** results. If you upload your own data, it is scored with the graph model when snapml is installed, and with the **baseline model** otherwise. You need **Python 3.11 or newer** ([python.org/downloads](https://www.python.org/downloads/)).
+
+**Mac.** Check `python3 --version` first. If it's older than 3.11, install Python from python.org and use `python3.12` in place of `python3` below. On an Intel Mac without Homebrew, use [Option 1](#option-1-full-graph-model-on-linux-or-an-intel-mac) instead.
+
+```bash
+brew install libomp                # XGBoost needs OpenMP. No Homebrew? Get it from https://brew.sh
+git clone https://github.com/SnowyHedgeDog/88-Credit-Score.git
+cd 88-Credit-Score
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python -m app.server
+```
+
+**Windows** (PowerShell):
+
+```powershell
+git clone https://github.com/SnowyHedgeDog/88-Credit-Score.git
+cd 88-Credit-Score
+py -m venv .venv
+.venv\Scripts\python -m pip install -r requirements.txt
+.venv\Scripts\python -m app.server
+```
+
+**Linux:**
+
+```bash
+git clone https://github.com/SnowyHedgeDog/88-Credit-Score.git
+cd 88-Credit-Score
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python -m app.server
+```
+
+The app opens at http://localhost:8000 with the sample batch already loaded. No API keys or internet connection are needed once it's installed.
+
+### Check which model is running
+
+Each batch on the Batches page says which model scored it. The preloaded sample batch always says "scored with the graph model".
+
+For batches you upload:
+
+- **Graph model:** the terminal shows no note when the app starts.
+- **Baseline model:** the terminal prints a note that snapml isn't available, and the "Score a new batch" section says new batches use the baseline model.
+
+Every saved batch records which model scored it, so results from different models are never mixed up.
+
+### Stopping and starting again
+
+Press **Ctrl + C** in the terminal to stop the app. To start it again later, open a terminal in the project folder, activate the same environment (`source .venv/bin/activate`, or `source ~/miniforge-x86/bin/activate remitsentry` for the Miniforge setups), and run `python -m app.server`.
+
+Scored batches are saved in `app/data/` and are still there when you restart.
 
 ## Pages
 
@@ -107,22 +293,13 @@ We can only measure accuracy because our test data includes the true answer (`is
 
 ## Sample data
 
-`app/demo/` holds a **curated demo batch** built from our real test days (9–10 Sep 2022), which the model was not trained on: 4,093 transactions across 2,313 accounts.
+`app/demo/` holds a sample batch from our real test days (9–10 Sep 2022), which the model was not trained on: 4,558 transactions across 2,597 accounts. It loads automatically on first start, already scored with the graph model, so you can explore the app straight away.
 
-It was made in two steps, for the presentation only:
-
-1. **Sampled:** 300 laundering accounts and 1,200 clean accounts from the full test set, with every transfer they made.
-2. **Curated:** laundering accounts that RemitSentry did not flag as critical were then removed, so the demo can show the workflow on cases the app catches.
-
-Because of step 2, the "caught" and "false alarms" figures on the Batches page are **illustrative, not a measure of accuracy**. Run `train_models.py` to see the model's results on the full test set.
-
-To rebuild it from the full dataset in `cleaned/cleaned/`:
+To rebuild it from the full dataset in `cleaned/cleaned/`, use `scripts/make_demo_batch.py` (run it with `--help` for the options). Then save its graph-model scores with the graph model available:
 
 ```bash
-python scripts/make_demo_batch.py --from-cleaned cleaned/cleaned --curate
+python scripts/save_demo_scores.py
 ```
-
-Leave out `--curate` to get the uncurated sample.
 
 ## Where is the full dataset?
 
@@ -250,7 +427,7 @@ Saved graph checkpoints let chronological uploads append without replaying
 the entire transaction journal; historical uploads reconstruct the needed prefix.
 Historical uploads are replayed from earlier transactions, not scored against
 their future. A first upload starts without prior upload history, which is
-reported in the batch notes. Thus a small curated demo does not reproduce
+reported in the batch notes. Thus a small sample batch does not reproduce
 full-test performance or the full dataset's graph context.
 
 ## Feature regression checks
@@ -270,50 +447,60 @@ atomic feature/model publication, and native training/application scoring parity
 
 ```
 88-Credit-Score/
-├── app/                        The web app
-│   ├── server.py               Starts the app and handles requests from the browser
-│   ├── scoring.py              Runs the trained model on every transaction
-│   ├── graph_history.py        Transactional graph history and checkpoints
-│   ├── legacy_features.py      Compatibility with the existing KYC model
-│   ├── accounts.py             Account scoring rules, money flow, rule comparison and draft STR
-│   ├── model_config.json       Legacy model threshold (graph threshold is bundled)
-│   ├── store.py                Saves scored batches to app/data/ (created when the app runs, not uploaded)
-│   ├── demo/                   Sample batch loaded on first start
-│   │   ├── transactions.csv    Curated transactions from the test days
-│   │   ├── customers.csv       Profiles of the accounts involved
-│   │   └── demo_info.json      Name and description shown in the app
-│   └── static/                 What runs in the browser
-│       ├── index.html          Page layout and navigation
-│       ├── app.js              The five pages and their buttons and filters
-│       ├── charts.js           Charts and the money-flow map
-│       ├── app.css             Colours, fonts and layout
-│       └── vendor/             Chart library and fonts, so the app works offline
-├── scripts/
-│   └── make_demo_batch.py      Rebuilds app/demo/ from the full dataset
+├── app/                            The web app
+│   ├── __init__.py                 Marks app/ as a Python package
+│   ├── server.py                   Starts the app and handles requests from the browser
+│   ├── scoring.py                  Picks the model (graph, or baseline without snapml) and scores every transaction
+│   ├── graph_history.py            Stores graph history and checkpoints so new uploads build on earlier ones
+│   ├── legacy_features.py          Features for the baseline (KYC) model
+│   ├── accounts.py                 Account scoring rules, money flow, rule comparison and draft STR
+│   ├── store.py                    Saves scored batches to app/data/ (created when the app runs, not in the repo)
+│   ├── model_config.json           Baseline model threshold (the graph threshold is inside its bundle)
+│   ├── demo/                       Sample batch loaded on first start
+│   │   ├── transactions.csv        Sample transactions from the test days
+│   │   ├── customers.csv           Profiles of the accounts involved
+│   │   ├── demo_info.json          Name and description shown in the app
+│   │   └── graph_scores.json       Graph-model scores for the sample batch, so it shows them on every computer
+│   └── static/                     What runs in the browser
+│       ├── index.html              Page layout and navigation
+│       ├── app.js                  The pages and their buttons and filters
+│       ├── charts.js               Charts and the money-flow map
+│       ├── app.css                 Colours, fonts and layout
+│       └── vendor/                 Chart library and fonts, so the app works offline
 ├── models/
-│   ├── graph/                 New graph bundle and feature manifest (after training)
-│   ├── xgboost.joblib          Existing legacy model
-│   └── preprocessor.joblib     Existing legacy preprocessing
+│   ├── graph/
+│   │   ├── model_bundle.joblib     Graph model: XGBoost, preprocessing, threshold and manifest (main model)
+│   │   └── feature_manifest.json   The 270 graph features, windows and settings the model expects
+│   ├── xgboost.joblib              Baseline model (used when snapml is unavailable)
+│   └── preprocessor.joblib         Baseline model preprocessing
 ├── reports/
-│   ├── graph_model_results.json    New validation/test results (after training)
+│   ├── graph_model_results.json    Graph model validation, test and stress-test results
+│   ├── retraining.log              Baseline model training output
 │   └── data_inspection_report.txt  Data quality checks
-├── inspect_data.py             Step 1 of training: check the data
-├── split_data.py               Step 2: split by date into train, validation and test
-├── prepare_features.py         Step 3: build model inputs (also used by the app)
-├── graph_features.py           Shared versioned, stateful graph feature builder
-├── feature_cache.py            Validated streaming conversion and Parquet batch reads
-├── training_preprocessing.py   Exact training statistics and bounded matrix preparation
-├── train_models.py             Step 4: train the model and pick its alert threshold
-├── sort_date.py                Helper: counts transactions and laundering per day
-├── requirements.txt            Python packages needed
+├── scripts/
+│   ├── make_demo_batch.py          Rebuilds app/demo/ from the full dataset
+│   └── save_demo_scores.py         Saves the graph model's scores for the sample batch
+├── tests/                          Automated checks (run with: python -m unittest discover -s tests -v)
+├── inspect_data.py                 Training step 1: check the data
+├── split_data.py                   Training step 2: split by date into train, validation, test and stress test
+├── prepare_features.py             Training step 3: build graph features for every split
+├── train_models.py                 Training step 4: train XGBoost and choose the alert threshold
+├── graph_features.py               Shared graph feature builder, used by training and the app
+├── feature_cache.py                Converts feature files to fast Parquet and reads them in batches
+├── training_preprocessing.py       Training-only statistics and memory-bounded matrix preparation
+├── native_runtime.py               On Macs, finds an existing Conda OpenMP for training if Homebrew's is missing
+├── sort_date.py                    Helper: counts transactions and laundering per day
+├── requirements.txt                Python packages (snapml is installed only where IBM supports it)
+├── .gitignore                      Keeps the dataset, environments and saved batches out of git
 └── README.md
 ```
 
-The full dataset folder (`cleaned/cleaned/`) is not in the repo. See "Where is the full dataset?" below.
+The full dataset folder (`cleaned/cleaned/`) is not in the repo. See [Where is the full dataset?](#where-is-the-full-dataset).
 
 ## Limitations
 
 - Runs as a daily batch, not in real time.
+- The graph model depends on IBM's snapml, which only supports x86-64 Linux and Intel Macs on Python 3.9–3.12. Other computers run the baseline model unless set up as in [Option 2](#option-2-full-graph-model-on-an-apple-silicon-mac-or-windows).
 - No logins or multi-user support.
 - Rule points are set by the team and not yet tuned on data.
 - The draft STR is a sample. It follows the section order of the STRO STR form on SONAR (Singapore's online filing platform), but SONAR's exact fields and dropdown options may differ, and firms may have their own practices. Analysts must check it and fill in the missing fields before filing.
