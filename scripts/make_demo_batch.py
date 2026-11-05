@@ -363,9 +363,13 @@ def curate(tx: pd.DataFrame, cu: pd.DataFrame, info: dict):
     import sys
     sys.path.insert(0, str(ROOT))
     from app.accounts import build_accounts
-    from app.scoring import score_batch
+    from app.scoring import TXN_REQUIRED, score_batch
+    import hashlib
 
-    scored, cust, has_labels, _, threshold = score_batch(tx, cu)
+    namespace = "demo-curation:" + hashlib.sha256(
+        tx[TXN_REQUIRED].to_csv(index=False).encode()
+    ).hexdigest()[:16]
+    scored, cust, has_labels, _, threshold = score_batch(tx, cu, history_namespace=namespace)
     accounts = build_accounts(scored, cust, threshold, has_labels)
     bad = {k for k, a in accounts.items() if a["labelled_laundering"]}
     critical = {k for k, a in accounts.items() if a["status"] == "critical"}

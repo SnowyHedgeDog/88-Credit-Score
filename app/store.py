@@ -24,6 +24,10 @@ def save(meta: dict, tx: pd.DataFrame, cu: pd.DataFrame, accounts: dict) -> str:
     batch_id = meta.get("id") or uuid.uuid4().hex[:10]
     meta["id"] = batch_id
     meta["accounts_version"] = ACCOUNTS_VERSION
+    # Model identity belongs to the scored batch. Loading a newer model must
+    # never silently relabel historical predictions as predictions of that model.
+    for key, value in tx.attrs.get("scoring_metadata", {}).items():
+        meta.setdefault(key, value)
     d = _dir(batch_id)
     d.mkdir(parents=True, exist_ok=True)
     with open(d / "batch.pkl", "wb") as f:
