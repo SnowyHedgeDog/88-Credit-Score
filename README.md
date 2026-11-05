@@ -1,8 +1,6 @@
 # RemitSentry
 
-RemitSentry flags customer accounts that may be laundering money, so a small compliance team knows which ones to check first.
-
-It is built for small payment firms in Singapore, such as cross-border remittance companies.
+RemitSentry is an Anti-Money Laundering solution for small cross-border remittance firms in Singapore. It ingests transaction data and flags customer accounts that may be laundering money, so a small compliance team can prioritise investigations for suspicious transaction reports.
 
 **Category:** Consumer or B2B fintech application (money-laundering alert system).
 
