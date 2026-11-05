@@ -348,46 +348,6 @@ def synthetic(seed: int):
     return tx[TXN_COLUMNS], cu[CUSTOMER_COLUMNS], info
 
 
-# --------------------------------------------------------------------------
-# Curated demo batch
-# --------------------------------------------------------------------------
-def curate(tx: pd.DataFrame, cu: pd.DataFrame, info: dict):
-    """Drop laundering accounts that RemitSentry does not flag as critical.
-
-    For the presentation only: the result shows the workflow on accounts the
-    app does catch. It is NOT a measure of accuracy, and the app says so.
-    Transfers between a dropped account and a critical account are kept if
-    they are not labelled laundering, so the caught accounts keep their
-    evidence.
-    """
-    import sys
-    sys.path.insert(0, str(ROOT))
-    from app.accounts import build_accounts
-    from app.scoring import TXN_REQUIRED, score_batch
-    import hashlib
-
-    namespace = "demo-curation:" + hashlib.sha256(
-        tx[TXN_REQUIRED].to_csv(index=False).encode()
-    ).hexdigest()[:16]
-    scored, cust, has_labels, _, threshold = score_batch(tx, cu, history_namespace=namespace)
-    accounts = build_accounts(scored, cust, threshold, has_labels)
-    bad = {k for k, a in accounts.items() if a["labelled_laundering"]}
-    critical = {k for k, a in accounts.items() if a["status"] == "critical"}
-    missed = bad - critical
-    touches_missed = tx["sender_account_key"].isin(missed) | tx["receiver_account_key"].isin(missed)
-    keep_link = ((tx["sender_account_key"].isin(critical) | tx["receiver_account_key"].isin(critical))
-                 & (tx["is_laundering"] == 0))
-    tx = tx[~touches_missed | keep_link].reset_index(drop=True)
-    tx["txn_id"] = [f"TXN-{i:06d}" for i in range(1, len(tx) + 1)]
-    keys = set(tx["sender_account_key"]) | set(tx["receiver_account_key"])
-    cu = cu[cu["account_key"].isin(keys)].copy()
-    print(f"Curated: dropped {len(missed)} laundering accounts the app did not flag as critical")
-    info = dict(info, curated=True,
-                name="Test days, 9–10 Sep 2022",
-                description="Transactions from our held-out test days, which the model never trained on.")
-    return tx, cu, info
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     group = parser.add_mutually_exclusive_group(required=True)
@@ -396,16 +356,12 @@ def main():
     parser.add_argument("--laundering-accounts", type=int, default=300)
     parser.add_argument("--clean-accounts", type=int, default=1200)
     parser.add_argument("--seed", type=int, default=7)
-    parser.add_argument("--curate", action="store_true",
-                        help="drop laundering accounts the app misses (presentation demo only)")
     args = parser.parse_args()
 
     if args.synthetic:
         tx, cu, info = synthetic(args.seed)
     else:
         tx, cu, info = from_cleaned(args.from_cleaned, args.laundering_accounts, args.clean_accounts, args.seed)
-    if args.curate:
-        tx, cu, info = curate(tx, cu, info)
 
     OUT.mkdir(parents=True, exist_ok=True)
     tx.to_csv(OUT / "transactions.csv", index=False)

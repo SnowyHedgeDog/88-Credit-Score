@@ -89,6 +89,22 @@ def _xgboost():
         ) from exc
 
 
+FALLBACK_REASON = (
+    "The graph model needs IBM's snapml library, which can't be installed on this "
+    "computer (it only supports Linux and Intel Macs with Python 3.9-3.12), so the "
+    "baseline model is used instead. See 'Full graph model' in the README."
+)
+
+
+def graph_backend_error():
+    """Return why graph features can't run on this computer, or None if they can."""
+    try:
+        from snapml import GraphFeaturePreprocessor  # noqa: F401
+    except (ImportError, OSError) as exc:
+        return exc
+    return None
+
+
 def _artifact_signature():
     paths = [GRAPH_BUNDLE] if GRAPH_BUNDLE.exists() else [
         MODEL_DIR / "preprocessor.joblib", MODEL_DIR / "xgboost.joblib",
@@ -119,9 +135,12 @@ def _feature_groups(preprocessor):
 @lru_cache(maxsize=2)
 def _load_model_cached(signature):
     _xgboost()
+    # The graph model is preferred. Without snapml (e.g. Windows, Apple Silicon or
+    # Python 3.13+), fall back openly to the baseline model and say so in the app.
+    fallback = GRAPH_BUNDLE.exists() and graph_backend_error() is not None
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        if GRAPH_BUNDLE.exists():
+        if GRAPH_BUNDLE.exists() and not fallback:
             bundle = joblib.load(GRAPH_BUNDLE)
             required = {"model", "preprocessor", "threshold", "feature_manifest", "model_id", "report"}
             if not isinstance(bundle, dict) or not required.issubset(bundle):
@@ -171,6 +190,8 @@ def _load_model_cached(signature):
             results = json.loads(source.read_text())
             model_id = hashlib.sha256((MODEL_DIR / "xgboost.joblib").read_bytes()).hexdigest()[:16]
             results.update({"model_id": "legacy-" + model_id, "feature_mode": "legacy"})
+            if fallback:
+                results["fallback_reason"] = FALLBACK_REASON
     threshold = float(results["threshold"])
     if not np.isfinite(threshold) or not 0 <= threshold <= 1:
         raise BatchError("The saved model has an invalid alert threshold.")
@@ -327,11 +348,31 @@ def score_batch(transactions: pd.DataFrame, customers: pd.DataFrame,
             tx["drivers"] = drivers
             tx.attrs["scoring_metadata"] = {
                 "model_id": results["model_id"], "feature_mode": results["feature_mode"],
+                **({"model_fallback": results["fallback_reason"]} if results.get("fallback_reason") else {}),
                 **prepared.metadata,
             }
     except ValueError as exc:
         raise BatchError(str(exc)) from exc
     return tx, cu, has_labels, notes, threshold
+
+
+def apply_saved_scores(transactions: pd.DataFrame, customers: pd.DataFrame, saved: dict):
+    """Attach graph-model scores saved for the sample batch (scripts/save_demo_scores.py).
+
+    The sample batch then shows graph-model results on every computer, including
+    those that can't install snapml. Returns the same values as score_batch().
+    """
+    tx, cu, has_labels = normalise_inputs(transactions, customers)
+    rows = saved.get("transactions", {})
+    if len(rows) != len(tx) or not tx["txn_id"].isin(list(rows)).all():
+        raise BatchError("The saved sample-batch scores don't match app/demo/transactions.csv. "
+                         "Run scripts/save_demo_scores.py with the graph model.")
+    threshold = float(saved["threshold"])
+    tx["score"] = [float(rows[i]["score"]) for i in tx["txn_id"]]
+    tx["flagged"] = tx["score"] >= threshold
+    tx["drivers"] = [rows[i]["drivers"] for i in tx["txn_id"]]
+    tx.attrs["scoring_metadata"] = dict(saved.get("scoring_metadata", {}))
+    return tx, cu, has_labels, list(saved.get("notes", [])), threshold
 
 
 def feature_importance():
