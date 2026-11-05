@@ -1,0 +1,25 @@
+{
+  // One-click environment for GitHub Codespaces (or VS Code Dev Containers).
+  // snapml 1.17.2 only ships builds for Linux/Intel-Mac x86-64 on Python 3.9-3.12,
+  // so this pins Linux x86-64 + Python 3.12 where every dependency installs cleanly.
+  "name": "RemitSentry",
+  "image": "mcr.microsoft.com/devcontainers/python:1-3.12-bookworm",
+  "runArgs": ["--platform=linux/amd64"],
+  "hostRequirements": { "cpus": 2 },
+
+  // Install OpenMP (used by snapml and XGBoost) and the Python packages once.
+  "postCreateCommand": "sudo apt-get update && sudo apt-get install -y --no-install-recommends libgomp1 && pip install -r requirements.txt",
+
+  // Start the app automatically whenever the codespace opens.
+  "postAttachCommand": "python -m app.server --no-browser",
+
+  "forwardPorts": [8000],
+  "portsAttributes": {
+    "8000": { "label": "RemitSentry app", "onAutoForward": "openBrowser" }
+  },
+
+  "customizations": {
+    "vscode": { "extensions": ["ms-python.python"] },
+    "codespaces": { "openFiles": ["README.md"] }
+  }
+}

@@ -10,9 +10,64 @@ RemitSentry is an Anti-Money Laundering solution for small cross-border remittan
 2. The app gives every account a risk score from 1 to 10, using those transaction scores plus simple behaviour rules.
 3. Each account shows the reasons for its score, its transactions, a money-flow map and a draft suspicious transaction report (STR).
 
-## Setup
+## Quick start: run it in your browser (recommended)
 
-Requirements: Python 3.12 or newer. On a Mac, also run `brew install libomp` once (needed by XGBoost).
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/SnowyHedgeDog/88-Credit-Score)
+
+This works on any computer (Mac, Windows, Linux, Chromebook) and needs nothing installed. You only need a GitHub account.
+
+1. Click the **Open in GitHub Codespaces** button above, then **Create codespace**.
+   (Or, on the repo page: **Code → Codespaces → Create codespace on main**.)
+2. Wait for setup to finish. The first time takes about 5 minutes while the packages install.
+3. The app starts by itself and a popup offers **Open in Browser**. Click it.
+   - No popup? Open the **Ports** tab at the bottom, find port **8000**, and click the globe icon.
+   - App not running? In the terminal, run `python -m app.server --no-browser`.
+4. The sample batch loads on first start (about 15 seconds), so the alert queue is ready to explore.
+
+When you're done, stop the codespace (**Code → Codespaces → ⋯ → Stop codespace**) so it doesn't use up GitHub's free monthly hours.
+
+## Why the browser option? (platform requirements)
+
+The model's graph features use IBM's **snapml 1.17.2**, which is only published for x86-64 machines running **Python 3.9–3.12**. That means it can't be installed directly on Windows, Apple Silicon Macs (M1–M4), or Python 3.13+. The codespace provides a Linux x86-64 machine with Python 3.12, so it works for everyone.
+
+| Your computer | Run it locally? |
+| --- | --- |
+| Linux (x86-64) | Yes, with Python 3.9–3.12 |
+| Intel Mac | Yes, with Python 3.9–3.12 and `brew install libomp` |
+| Apple Silicon Mac (M1–M4) | Use the codespace, or the Rosetta setup below |
+| Windows | Use the codespace (or WSL2 with Ubuntu) |
+
+## Run on your own computer (optional)
+
+**Linux or Intel Mac** (Python 3.9–3.12):
+
+```bash
+git clone https://github.com/SnowyHedgeDog/88-Credit-Score.git
+cd 88-Credit-Score
+brew install libomp                # Mac only
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python -m app.server
+```
+
+**Apple Silicon Mac**: run an Intel copy of Python through Rosetta. This takes about 10 minutes once.
+
+```bash
+softwareupdate --install-rosetta --agree-to-license
+# Intel Homebrew installs to /usr/local and doesn't affect your normal Homebrew
+arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+arch -x86_64 /usr/local/bin/brew install python@3.12 libomp
+
+cd 88-Credit-Score
+/usr/local/bin/python3.12 -m venv .venv-x86
+source .venv-x86/bin/activate
+python -c "import platform; print(platform.machine())"   # should print x86_64
+pip install -r requirements.txt
+python -m app.server
+```
+
+In VS Code, choose this environment with **Python: Select Interpreter → .venv-x86**.
 
 If Homebrew's OpenMP runtime is missing but Conda already provides it,
 `python train_models.py` automatically uses that existing library through an
@@ -20,23 +75,15 @@ isolated directory inside the Python environment and restarts once before
 loading native packages. It prints the selected path. This avoids exposing
 unrelated Conda libraries to NumPy. Other launchers still need OpenMP configured.
 
-```bash
-git clone https://github.com/SnowyHedgeDog/88-Credit-Score.git
-cd 88-Credit-Score
-python -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-```
-
 ## Run
 
 ```bash
 python -m app.server
 ```
 
-The app opens at http://localhost:8000. It loads a sample batch on first start (about 15 seconds). Press Ctrl + C to stop it.
+The app opens at http://localhost:8000 (in a codespace, through the forwarded port 8000). It loads a sample batch on first start (about 15 seconds). Press Ctrl + C to stop it.
 
-No internet connection or API keys are needed.
+No API keys are needed, and once installed it runs without an internet connection.
 
 ## Pages
 
